@@ -23,30 +23,43 @@ fn main() -> ExitCode {
 
 fn print_usage() {
     println!("clawpi-setupd");
-    println!("Phase 2 proving-ground setup helper.");
+    println!("Phase 3 proving-ground setup helper.");
     println!();
     println!("Available flags:");
-    println!("  --once    update proving-ground setup state once");
+    println!("  --once    seed or validate /etc/clawpi/config.toml once");
 }
 
 fn run_once() -> ExitCode {
     let layout = Layout::detect();
 
     match write_setup_state(&layout) {
-        Ok(mode) => {
+        Ok(state) => {
             println!("setup_state_path={}", layout.setup_state_path().display());
-            println!("mode={mode}");
+            println!("config_path={}", layout.config_path().display());
+            println!("config_created={}", state.config_created);
+            println!("config_status={}", state.config_status.label());
+            println!("mode={}", state.mode);
 
-            match mode {
+            if let Some(config) = state.config_status.as_config() {
+                println!("device_name={}", config.device_name);
+                println!("setup_state={}", config.setup_state);
+                println!("runtime_profile={}", config.runtime_profile);
+            }
+
+            if let Some(reason) = state.config_status.error() {
+                println!("config_error={reason}");
+            }
+
+            match state.mode {
                 Mode::Setup => {
                     println!("status=pending");
                     println!(
-                        "note=setup target is active but the real first-boot flow is not built yet"
+                        "note=setup mode remains active until config.toml is valid and complete"
                     );
                 }
                 Mode::Normal => {
                     println!("status=complete");
-                    println!("note=setup-complete marker is present");
+                    println!("note=config.toml is valid and setup is complete");
                 }
                 Mode::Recovery => {
                     println!("status=recovery");

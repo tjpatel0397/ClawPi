@@ -71,6 +71,12 @@ install -m 0644 systemd/clawpi-recovery.target "$SYSTEMD_DIR/clawpi-recovery.tar
 install -m 0644 systemd/clawpi-mode.service "$SYSTEMD_DIR/clawpi-mode.service"
 install -m 0644 systemd/clawpi-setupd.service "$SYSTEMD_DIR/clawpi-setupd.service"
 
+if [ "$ROOT_DIR" = "/" ]; then
+    "$LIBEXEC_DIR/clawpi-setupd" --once
+else
+    CLAWPI_ROOT="$ROOT_DIR" "$LIBEXEC_DIR/clawpi-setupd" --once
+fi
+
 if [ "$ENABLE_UNITS" -eq 1 ]; then
     if [ "$ROOT_DIR" = "/" ] && command -v systemctl >/dev/null 2>&1; then
         systemctl daemon-reload
@@ -93,6 +99,8 @@ echo "  $SYSTEMD_DIR/clawpi-setupd.service"
 echo "  $SYSTEMD_DIR/clawpi.target"
 echo "  $SYSTEMD_DIR/clawpi-setup.target"
 echo "  $SYSTEMD_DIR/clawpi-recovery.target"
+echo "clawpi: setup contract:"
+echo "  $CONFIG_DIR/config.toml"
 
 if [ "$ROOT_DIR" = "/" ]; then
     echo "clawpi: next steps on the Pi:"

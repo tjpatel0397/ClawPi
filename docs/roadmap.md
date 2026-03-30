@@ -81,6 +81,12 @@ Outputs:
 - config-writing path
 - handoff into normal mode
 
+Current status:
+
+- the repo now uses `/etc/clawpi/config.toml` as the first setup contract
+- `clawpi-setupd` seeds that config when it is missing
+- normal mode now depends on the config being valid and marked complete
+
 This is where ClawPi starts to feel like a system instead of just a codebase.
 
 ## Phase 4 — connect the runtime layer

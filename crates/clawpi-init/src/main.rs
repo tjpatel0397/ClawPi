@@ -1,10 +1,12 @@
-use clawpi_core::{detect_mode, record_mode, Layout};
+use clawpi_core::{detect_mode, inspect_state, record_mode, Layout};
 use std::env;
 use std::io;
 use std::process::{Command, ExitCode};
 
 fn main() -> ExitCode {
-    match env::args().nth(1).as_deref() {
+    let mut args = env::args().skip(1);
+
+    match args.next().as_deref() {
         None | Some("--help") | Some("-h") => {
             print_usage();
             ExitCode::SUCCESS
@@ -13,11 +15,7 @@ fn main() -> ExitCode {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
-        Some("mode") => {
-            let layout = Layout::detect();
-            println!("{}", detect_mode(&layout));
-            ExitCode::SUCCESS
-        }
+        Some("mode") => print_mode(),
         Some("status") => print_status(),
         Some("activate") => activate_mode(),
         Some(arg) => {
@@ -30,33 +28,79 @@ fn main() -> ExitCode {
 
 fn print_usage() {
     println!("clawpi-init");
-    println!("Phase 2 proving-ground boot and mode selection helper.");
+    println!("Phase 3 proving-ground boot and mode selection helper.");
     println!();
     println!("Available commands:");
     println!("  mode      print the selected ClawPi mode");
-    println!("  status    print mode and proving-ground state paths");
+    println!("  status    print mode and setup contract status");
     println!("  activate  record the selected mode and start its systemd target");
+}
+
+fn print_mode() -> ExitCode {
+    let layout = Layout::detect();
+
+    match detect_mode(&layout) {
+        Ok(mode) => {
+            println!("{mode}");
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("failed to determine mode: {err}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn print_status() -> ExitCode {
     let layout = Layout::detect();
-    let mode = detect_mode(&layout);
 
-    println!("root={}", layout.root().display());
-    println!("mode={mode}");
-    println!("target={}", mode.target_name());
-    println!("setup_complete={}", layout.setup_complete_path().exists());
-    println!(
-        "recovery_requested={}",
-        layout.recovery_requested_path().exists()
-    );
+    match inspect_state(&layout) {
+        Ok(state) => {
+            println!("root={}", layout.root().display());
+            println!("mode={}", state.mode);
+            println!("target={}", state.mode.target_name());
+            println!("config_path={}", layout.config_path().display());
+            println!("config_status={}", state.config_status.label());
 
-    ExitCode::SUCCESS
+            if let Some(config) = state.config_status.as_config() {
+                println!("device_name={}", config.device_name);
+                println!("setup_state={}", config.setup_state);
+                println!(
+                    "setup_complete={}",
+                    config.setup_state.as_str() == "complete"
+                );
+                println!("runtime_profile={}", config.runtime_profile);
+            } else {
+                println!("setup_complete=false");
+            }
+
+            if let Some(reason) = state.config_status.error() {
+                println!("config_error={reason}");
+            }
+
+            println!(
+                "recovery_requested={}",
+                layout.recovery_requested_path().exists()
+            );
+
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("failed to read ClawPi state: {err}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn activate_mode() -> ExitCode {
     let layout = Layout::detect();
-    let mode = detect_mode(&layout);
+    let mode = match detect_mode(&layout) {
+        Ok(mode) => mode,
+        Err(err) => {
+            eprintln!("failed to determine mode: {err}");
+            return ExitCode::from(1);
+        }
+    };
 
     if let Err(err) = record_mode(&layout, mode) {
         eprintln!("failed to record selected mode: {err}");

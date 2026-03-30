@@ -83,5 +83,6 @@ The repo now includes:
 - a Rust workspace for ClawPi-owned runtime code
 - early systemd targets and services for boot-mode selection
 - a proving-ground install path for the current DietPi-based CM5
+- a minimal setup contract built around `/etc/clawpi/config.toml`
 
 ClawPi is not a flashable image yet.

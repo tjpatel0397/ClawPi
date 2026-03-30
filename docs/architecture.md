@@ -158,6 +158,8 @@ At the moment this looks like:
 - `clawpi-mode.service` runs during boot on the current Pi
 - `clawpi-init` chooses a target based on simple local state
 - `clawpi-setup.target` starts `clawpi-setupd`
+- `clawpi-setupd` seeds or validates `/etc/clawpi/config.toml`
+- `clawpi-init` only enters normal mode when that config is valid and complete
 - `clawpi.target` and `clawpi-recovery.target` are still mostly placeholders
 
 This is a proving-ground path, not the final image design.
