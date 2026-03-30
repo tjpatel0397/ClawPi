@@ -89,7 +89,6 @@ The repo now includes:
 - a minimal setup-mode Wi-Fi provisioning path for the current Pi
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout
 - a small `scripts/install_pi_gen_deps.sh` helper for preparing a Debian build host
-- a first real arm64 `pi-gen` run on the CM5 proving ground that now reaches `stage-clawpi`
-- a current image-build blocker in the custom `stage-clawpi` rootfs handoff step
+- a custom `stage-clawpi` stage handoff that now inherits the `stage2` rootfs before applying the ClawPi payload
 
 ClawPi is not a flashable image yet.

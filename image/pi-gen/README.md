@@ -120,6 +120,10 @@ current ClawPi payload into a stage bundle under `target/pi-gen/stage-clawpi`.
 If you pass `--pi-gen-dir`, the script will also sync `stage-clawpi` into that
 checkout and write a matching `config` file before running `build.sh`.
 
+That custom stage now includes a `prerun.sh` handoff, so `pi-gen` copies the
+previous `stage2` rootfs into `stage-clawpi` before the ClawPi payload is
+applied.
+
 If the build host is missing `pi-gen` prerequisites, use
 `scripts/install_pi_gen_deps.sh --pi-gen-dir /path/to/pi-gen` on a Debian-based
 machine before running the build.
@@ -127,10 +131,3 @@ machine before running the build.
 On CM5-class arm64 hosts running a `16k` page-size kernel, a default `pi-gen`
 `master` checkout is the wrong target because it builds the `armhf` path. Use
 the `arm64` branch for those hosts before running `scripts/build_image.sh`.
-
-The first real arm64 `pi-gen` run on the proving-ground CM5 now reaches
-`stage-clawpi`.
-
-The current blocker is the custom stage handoff into the image rootfs:
-`image/pi-gen/stage-clawpi/01-clawpi/00-run.sh` is still trying to copy into a
-rootfs path that is not present at that point in the build.

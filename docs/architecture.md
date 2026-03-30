@@ -178,11 +178,11 @@ The current shape is intentionally small:
 - the stage copies ClawPi binaries and units into the image rootfs
 - the stage seeds `/etc/clawpi/config.toml` in pending setup mode
 - the stage enables `clawpi-mode.service` for first boot
+- the stage now uses a `prerun.sh` handoff so `pi-gen` copies the previous `stage2` rootfs into `stage-clawpi` before applying ClawPi files
 - when given a `pi-gen` checkout, the script syncs `stage-clawpi` into that tree and writes a matching `config`
 - `scripts/install_pi_gen_deps.sh` can prepare a Debian build host using either the checkout's `depends` file or the current upstream dependency set
 - on a CM5-class arm64 build host with a `16k` page-size kernel, the image build should use the `pi-gen` `arm64` branch rather than the default `master` checkout
-- the first real arm64 `pi-gen` run on the proving-ground CM5 now gets through `stage0`, `stage1`, and `stage2` and reaches `stage-clawpi`
-- the current blocker is the custom stage rootfs handoff in `image/pi-gen/stage-clawpi/01-clawpi/00-run.sh`
+- the next proving-ground step is rerunning the real CM5 build to verify the image now continues past `stage-clawpi`
 
 This is not the full image pipeline yet.
 

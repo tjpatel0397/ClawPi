@@ -4,6 +4,7 @@ This directory is a ClawPi-owned custom stage for `pi-gen`.
 
 It is intentionally narrow:
 
+- inherit the `stage2` rootfs with the normal `pi-gen` stage handoff
 - install the current ClawPi binaries
 - install the current ClawPi systemd units
 - seed `/etc/clawpi/config.toml` into pending setup mode

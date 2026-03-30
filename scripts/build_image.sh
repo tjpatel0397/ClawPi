@@ -90,9 +90,10 @@ install -d "$STAGE_STEP_DIR"
 
 cp "$TEMPLATE_DIR/EXPORT_IMAGE" "$STAGE_DIR/EXPORT_IMAGE"
 cp "$TEMPLATE_DIR/README.md" "$STAGE_DIR/README.md"
+cp "$TEMPLATE_DIR/prerun.sh" "$STAGE_DIR/prerun.sh"
 cp "$TEMPLATE_DIR/01-clawpi/00-run.sh" "$STAGE_STEP_DIR/00-run.sh"
 cp "$TEMPLATE_DIR/01-clawpi/00-run-chroot.sh" "$STAGE_STEP_DIR/00-run-chroot.sh"
-chmod 0755 "$STAGE_STEP_DIR/00-run.sh" "$STAGE_STEP_DIR/00-run-chroot.sh"
+chmod 0755 "$STAGE_DIR/prerun.sh" "$STAGE_STEP_DIR/00-run.sh" "$STAGE_STEP_DIR/00-run-chroot.sh"
 
 "$REPO_ROOT/scripts/install_dev_on_pi.sh" --root "$FILES_DIR" --no-enable
 

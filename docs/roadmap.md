@@ -153,8 +153,8 @@ Current status:
 - `scripts/build_image.sh` can now sync that stage into a real `pi-gen` checkout and write the matching `config`
 - the repo now includes a small helper for installing `pi-gen` build dependencies on Debian
 - the build path now checks for the current CM5/DietPi `16k` page-size mismatch and points the user to the `pi-gen` `arm64` branch
-- the first real arm64 `pi-gen` build on the proving-ground CM5 now reaches `stage-clawpi`
-- the current blocker is the custom stage rootfs handoff inside `stage-clawpi`, not host dependency setup or branch selection
+- the custom `stage-clawpi` stage now carries a proper `prerun.sh` rootfs handoff from `stage2`
+- the next proving-ground step is rerunning the real arm64 `pi-gen` build on the CM5
 - the full end-to-end flashable image flow still needs to be completed
 
 ## Phase 7 — ownership, pairing, and recovery
