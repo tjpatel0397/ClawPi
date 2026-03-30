@@ -63,6 +63,10 @@ fn print_status() -> ExitCode {
             println!("config_status={}", state.config_status.label());
             println!("state_dir={}", layout.state_dir().display());
             println!("run_dir={}", layout.run_dir().display());
+            println!(
+                "session_status_path={}",
+                layout.session_status_path().display()
+            );
 
             if let Some(config) = state.config_status.as_config() {
                 println!("device_name={}", config.device_name);
@@ -99,6 +103,28 @@ fn print_status() -> ExitCode {
                 Ok(None) => println!("active_mode=unknown"),
                 Err(err) => {
                     eprintln!("failed to read active mode: {err}");
+                    return ExitCode::from(1);
+                }
+            }
+
+            match read_optional_file(&layout.session_status_path()) {
+                Ok(Some(content)) => {
+                    println!(
+                        "session_status={}",
+                        lookup_field(&content, "status").unwrap_or("unknown")
+                    );
+                    println!(
+                        "session_mode={}",
+                        lookup_field(&content, "mode").unwrap_or("unknown")
+                    );
+                    println!(
+                        "session_heartbeat_unix={}",
+                        lookup_field(&content, "heartbeat_unix").unwrap_or("unknown")
+                    );
+                }
+                Ok(None) => println!("session_status=absent"),
+                Err(err) => {
+                    eprintln!("failed to read session status: {err}");
                     return ExitCode::from(1);
                 }
             }
@@ -169,4 +195,15 @@ fn mode_or_error(layout: &Layout) -> String {
         Ok(mode) => mode.to_string(),
         Err(err) => format!("error:{err}"),
     }
+}
+
+fn lookup_field<'a>(content: &'a str, key: &str) -> Option<&'a str> {
+    content.lines().find_map(|line| {
+        let (current_key, value) = line.split_once('=')?;
+        if current_key == key {
+            Some(value)
+        } else {
+            None
+        }
+    })
 }

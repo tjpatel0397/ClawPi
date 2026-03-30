@@ -3,6 +3,7 @@ members = [
     "crates/clawpi-core",
     "crates/clawpi-init",
     "crates/clawpi-ctl",
+    "crates/clawpi-sessiond",
     "crates/clawpi-setupd",
 ]
 resolver = "2"

@@ -1,0 +1,10 @@
+[Unit]
+Description=ClawPi proving-ground session service
+ConditionPathExists=/usr/local/libexec/clawpi/clawpi-sessiond
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/clawpi/clawpi-sessiond
+Restart=on-failure
+RestartSec=2

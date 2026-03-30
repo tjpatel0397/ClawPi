@@ -102,6 +102,12 @@ Outputs:
 - memory/task direction
 - example system behavior
 
+Current status:
+
+- the repo includes a minimal normal-mode daemon started from `clawpi.target`
+- that daemon writes runtime status under `/run/clawpi`
+- this is only the first runtime foothold, not the full agent/runtime layer
+
 This phase should focus on integration, not on rebuilding everything from scratch.
 
 ## Phase 5 — make setup resilient

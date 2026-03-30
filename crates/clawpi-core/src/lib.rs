@@ -154,6 +154,10 @@ impl Layout {
         self.root.join("run").join("clawpi")
     }
 
+    pub fn session_status_path(&self) -> PathBuf {
+        self.run_dir().join("sessiond.status")
+    }
+
     pub fn legacy_setup_complete_path(&self) -> PathBuf {
         self.state_dir().join("setup-complete")
     }
