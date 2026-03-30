@@ -159,6 +159,7 @@ At the moment this looks like:
 - `clawpi-init` chooses a target based on simple local state
 - `clawpi-setup.target` starts `clawpi-setupd`
 - `clawpi-setupd` seeds or validates `/etc/clawpi/config.toml`
+- `clawpi-wifid` can turn stored setup-mode Wi-Fi settings into a `wpa_supplicant` config on the current Pi
 - `clawpi-init` only enters normal mode when that config is valid and complete
 - the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` now starts `clawpi-sessiond`, which keeps a minimal runtime heartbeat under `/run/clawpi`

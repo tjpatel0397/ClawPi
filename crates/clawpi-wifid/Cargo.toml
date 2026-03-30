@@ -1,0 +1,7 @@
+[package]
+name = "clawpi-wifid"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clawpi-core = { path = "../clawpi-core" }

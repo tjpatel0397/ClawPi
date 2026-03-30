@@ -126,7 +126,7 @@ Current status:
 
 - the repo now includes a recovery service that redirects recovery mode back into setup mode
 - setup fallback behavior is starting to take shape on the proving-ground Pi
-- Wi-Fi setup is still not implemented
+- the repo now includes a minimal setup-mode Wi-Fi provisioning helper for the current Pi
 
 This is the point where a fresh flash starts feeling much more usable.
 

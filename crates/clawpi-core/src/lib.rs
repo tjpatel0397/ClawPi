@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 pub const CONFIG_VERSION: u32 = 1;
 pub const RUNTIME_PROFILE: &str = "proving-ground";
+pub const DEFAULT_WIFI_COUNTRY: &str = "US";
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Mode {
@@ -73,6 +74,9 @@ pub struct ClawPiConfig {
     pub device_name: String,
     pub setup_state: SetupState,
     pub runtime_profile: String,
+    pub wifi_country: String,
+    pub wifi_ssid: Option<String>,
+    pub wifi_passphrase: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -162,6 +166,18 @@ impl Layout {
         self.run_dir().join("recovery.status")
     }
 
+    pub fn wifi_status_path(&self) -> PathBuf {
+        self.run_dir().join("wifi.status")
+    }
+
+    pub fn wpa_supplicant_dir(&self) -> PathBuf {
+        self.root.join("etc").join("wpa_supplicant")
+    }
+
+    pub fn wpa_supplicant_config_path(&self) -> PathBuf {
+        self.wpa_supplicant_dir().join("wpa_supplicant-wlan0.conf")
+    }
+
     pub fn legacy_setup_complete_path(&self) -> PathBuf {
         self.state_dir().join("setup-complete")
     }
@@ -234,6 +250,54 @@ pub fn set_device_name(layout: &Layout, device_name: &str) -> io::Result<ClawPiC
 
     let mut config = config_for_update(layout)?;
     config.device_name = trimmed.to_string();
+    validate_config(&config).map_err(invalid_data)?;
+    write_config(layout, &config)?;
+
+    Ok(config)
+}
+
+pub fn set_wifi_credentials(
+    layout: &Layout,
+    ssid: &str,
+    passphrase: &str,
+    country: Option<&str>,
+) -> io::Result<ClawPiConfig> {
+    layout.ensure_dirs()?;
+
+    let ssid = ssid.trim();
+    let passphrase = passphrase.trim();
+
+    if ssid.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "wifi ssid must not be empty",
+        ));
+    }
+
+    if passphrase.len() < 8 || passphrase.len() > 63 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "wifi passphrase must be 8 to 63 characters",
+        ));
+    }
+
+    let mut config = config_for_update(layout)?;
+    config.wifi_ssid = Some(ssid.to_string());
+    config.wifi_passphrase = Some(passphrase.to_string());
+    config.wifi_country = normalize_wifi_country(country.unwrap_or(DEFAULT_WIFI_COUNTRY))
+        .map_err(|reason| io::Error::new(io::ErrorKind::InvalidInput, reason))?;
+    validate_config(&config).map_err(invalid_data)?;
+    write_config(layout, &config)?;
+
+    Ok(config)
+}
+
+pub fn clear_wifi_credentials(layout: &Layout) -> io::Result<ClawPiConfig> {
+    layout.ensure_dirs()?;
+
+    let mut config = config_for_update(layout)?;
+    config.wifi_ssid = None;
+    config.wifi_passphrase = None;
     validate_config(&config).map_err(invalid_data)?;
     write_config(layout, &config)?;
 
@@ -316,6 +380,55 @@ pub fn prepare_setup_fallback(layout: &Layout) -> io::Result<SystemState> {
     Ok(state)
 }
 
+pub fn apply_wifi_config(layout: &Layout) -> io::Result<()> {
+    layout.ensure_dirs()?;
+
+    let config_status = read_config_status(layout)?;
+    let status_content = match config_status {
+        ConfigStatus::Missing => format!(
+            "phase=5\nstatus=missing-config\nconfig_path={}\n",
+            layout.config_path().display()
+        ),
+        ConfigStatus::Invalid(reason) => format!(
+            "phase=5\nstatus=invalid-config\nconfig_path={}\nconfig_error={reason}\n",
+            layout.config_path().display()
+        ),
+        ConfigStatus::Valid(config) => {
+            let (ssid, passphrase) = match (&config.wifi_ssid, &config.wifi_passphrase) {
+                (Some(ssid), Some(passphrase)) => (ssid, passphrase),
+                _ => {
+                    let content = format!(
+                        "phase=5\nstatus=not-configured\nwifi_country={}\n",
+                        config.wifi_country
+                    );
+                    fs::write(layout.wifi_status_path(), content)?;
+                    return Ok(());
+                }
+            };
+
+            fs::create_dir_all(layout.wpa_supplicant_dir())?;
+            let file_content = format!(
+                "ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev\nupdate_config=1\ncountry={}\n\nnetwork={{\n    ssid={}\n    psk={}\n    key_mgmt=WPA-PSK\n}}\n",
+                config.wifi_country,
+                format_string(ssid),
+                format_string(passphrase),
+            );
+            fs::write(layout.wpa_supplicant_config_path(), file_content)?;
+
+            let reload = try_reload_wifi()?;
+            format!(
+                "phase=5\nstatus=configured\nwifi_ssid={}\nwifi_country={}\nwpa_supplicant_path={}\nreload={reload}\n",
+                ssid,
+                config.wifi_country,
+                layout.wpa_supplicant_config_path().display()
+            )
+        }
+    };
+
+    fs::write(layout.wifi_status_path(), status_content)?;
+    Ok(())
+}
+
 pub fn record_mode(layout: &Layout, mode: Mode) -> io::Result<()> {
     layout.ensure_dirs()?;
     fs::write(layout.active_mode_path(), format!("{}\n", mode.as_str()))?;
@@ -338,6 +451,8 @@ pub fn write_setup_state(layout: &Layout) -> io::Result<SystemState> {
         content.push_str(&format!("device_name={}\n", config.device_name));
         content.push_str(&format!("setup_state={}\n", config.setup_state.as_str()));
         content.push_str(&format!("runtime_profile={}\n", config.runtime_profile));
+        content.push_str(&format!("wifi_country={}\n", config.wifi_country));
+        content.push_str(&format!("wifi_configured={}\n", config.wifi_ssid.is_some()));
     }
 
     if let Some(reason) = state.config_status.error() {
@@ -442,6 +557,9 @@ fn default_config(layout: &Layout) -> io::Result<ClawPiConfig> {
         device_name,
         setup_state,
         runtime_profile: String::from(RUNTIME_PROFILE),
+        wifi_country: String::from(DEFAULT_WIFI_COUNTRY),
+        wifi_ssid: None,
+        wifi_passphrase: None,
     };
 
     validate_config(&config).map_err(invalid_data)?;
@@ -453,11 +571,14 @@ fn write_config(layout: &Layout, config: &ClawPiConfig) -> io::Result<()> {
     validate_config(config).map_err(invalid_data)?;
 
     let content = format!(
-        "config_version = {}\ndevice_name = {}\nsetup_state = {}\nruntime_profile = {}\n",
+        "config_version = {}\ndevice_name = {}\nsetup_state = {}\nruntime_profile = {}\nwifi_country = {}\n{}{}",
         config.config_version,
         format_string(&config.device_name),
         format_string(config.setup_state.as_str()),
         format_string(&config.runtime_profile),
+        format_string(&config.wifi_country),
+        optional_config_line("wifi_ssid", config.wifi_ssid.as_deref()),
+        optional_config_line("wifi_passphrase", config.wifi_passphrase.as_deref()),
     );
     fs::write(layout.config_path(), content)?;
     remove_if_exists(&layout.legacy_setup_complete_path())?;
@@ -484,6 +605,25 @@ fn validate_config(config: &ClawPiConfig) -> Result<(), String> {
         ));
     }
 
+    normalize_wifi_country(&config.wifi_country)?;
+
+    match (&config.wifi_ssid, &config.wifi_passphrase) {
+        (Some(ssid), Some(passphrase)) => {
+            if ssid.trim().is_empty() {
+                return Err(String::from("wifi_ssid must not be empty"));
+            }
+            if passphrase.len() < 8 || passphrase.len() > 63 {
+                return Err(String::from("wifi_passphrase must be 8 to 63 characters"));
+            }
+        }
+        (None, None) => {}
+        _ => {
+            return Err(String::from(
+                "wifi_ssid and wifi_passphrase must be set together",
+            ))
+        }
+    }
+
     Ok(())
 }
 
@@ -492,6 +632,9 @@ fn parse_config(content: &str) -> Result<ClawPiConfig, String> {
     let mut device_name = None;
     let mut setup_state = None;
     let mut runtime_profile = None;
+    let mut wifi_country = None;
+    let mut wifi_ssid = None;
+    let mut wifi_passphrase = None;
 
     for (index, raw_line) in content.lines().enumerate() {
         let line_number = index + 1;
@@ -525,6 +668,15 @@ fn parse_config(content: &str) -> Result<ClawPiConfig, String> {
             "runtime_profile" => {
                 runtime_profile = Some(parse_string(value, line_number)?);
             }
+            "wifi_country" => {
+                wifi_country = Some(parse_string(value, line_number)?);
+            }
+            "wifi_ssid" => {
+                wifi_ssid = Some(parse_string(value, line_number)?);
+            }
+            "wifi_passphrase" => {
+                wifi_passphrase = Some(parse_string(value, line_number)?);
+            }
             _ => return Err(format!("line {line_number}: unsupported key {key}")),
         }
     }
@@ -538,6 +690,9 @@ fn parse_config(content: &str) -> Result<ClawPiConfig, String> {
             .ok_or_else(|| String::from("missing setup_state in config.toml"))?,
         runtime_profile: runtime_profile
             .ok_or_else(|| String::from("missing runtime_profile in config.toml"))?,
+        wifi_country: wifi_country.unwrap_or_else(|| String::from(DEFAULT_WIFI_COUNTRY)),
+        wifi_ssid,
+        wifi_passphrase,
     };
 
     validate_config(&config)?;
@@ -557,6 +712,42 @@ fn parse_string(value: &str, line_number: usize) -> Result<String, String> {
 fn format_string(value: &str) -> String {
     let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
     format!("\"{escaped}\"")
+}
+
+fn optional_config_line(key: &str, value: Option<&str>) -> String {
+    match value {
+        Some(value) => format!("{key} = {}\n", format_string(value)),
+        None => String::new(),
+    }
+}
+
+fn normalize_wifi_country(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.len() != 2 || !trimmed.chars().all(|ch| ch.is_ascii_alphabetic()) {
+        return Err(format!("invalid wifi_country: {value}"));
+    }
+    Ok(trimmed.to_ascii_uppercase())
+}
+
+fn try_reload_wifi() -> io::Result<String> {
+    let attempts = [
+        ("systemctl", vec!["restart", "wpa_supplicant@wlan0.service"]),
+        ("systemctl", vec!["restart", "wpa_supplicant.service"]),
+        ("wpa_cli", vec!["-i", "wlan0", "reconfigure"]),
+    ];
+
+    for (program, args) in attempts {
+        match std::process::Command::new(program).args(&args).status() {
+            Ok(status) if status.success() => {
+                return Ok(format!("{program} {}", args.join(" ")));
+            }
+            Ok(_) => continue,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(_) => continue,
+        }
+    }
+
+    Ok(String::from("manual-reload-needed"))
 }
 
 fn invalid_data(reason: String) -> io::Error {
@@ -649,6 +840,26 @@ mod tests {
         };
         assert_eq!(config.device_name, "clawpi-cm5");
         assert_eq!(config.setup_state, SetupState::Pending);
+        assert_eq!(config.wifi_country, DEFAULT_WIFI_COUNTRY);
+
+        cleanup_test_root(&root);
+    }
+
+    #[test]
+    fn set_wifi_credentials_writes_optional_wifi_fields() {
+        let root = unique_test_root();
+        let layout = Layout::from_root(&root);
+
+        set_wifi_credentials(&layout, "ClawNet", "verysecret", Some("us")).unwrap();
+
+        let state = inspect_state(&layout).unwrap();
+        let config = match state.config_status {
+            ConfigStatus::Valid(config) => config,
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => panic!("expected config"),
+        };
+        assert_eq!(config.wifi_country, "US");
+        assert_eq!(config.wifi_ssid.as_deref(), Some("ClawNet"));
+        assert_eq!(config.wifi_passphrase.as_deref(), Some("verysecret"));
 
         cleanup_test_root(&root);
     }

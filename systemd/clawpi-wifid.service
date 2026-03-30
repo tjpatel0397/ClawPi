@@ -1,0 +1,9 @@
+[Unit]
+Description=ClawPi proving-ground Wi-Fi setup service
+ConditionPathExists=/usr/local/libexec/clawpi/clawpi-wifid
+PartOf=clawpi-setup.target
+After=local-fs.target clawpi-setupd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/clawpi/clawpi-wifid

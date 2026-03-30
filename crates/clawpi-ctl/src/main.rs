@@ -1,6 +1,6 @@
 use clawpi_core::{
-    detect_mode, inspect_state, mark_setup_complete, read_optional_file, set_device_name,
-    set_recovery_requested, Layout,
+    clear_wifi_credentials, detect_mode, inspect_state, mark_setup_complete, read_optional_file,
+    set_device_name, set_recovery_requested, set_wifi_credentials, Layout,
 };
 use std::env;
 use std::process::ExitCode;
@@ -25,6 +25,25 @@ fn main() -> ExitCode {
                 ExitCode::from(2)
             }
         },
+        Some("set-wifi") => {
+            let ssid = match args.next() {
+                Some(value) => value,
+                None => {
+                    eprintln!("set-wifi requires SSID and passphrase");
+                    return ExitCode::from(2);
+                }
+            };
+            let passphrase = match args.next() {
+                Some(value) => value,
+                None => {
+                    eprintln!("set-wifi requires SSID and passphrase");
+                    return ExitCode::from(2);
+                }
+            };
+            let country = args.next();
+            update_wifi(&ssid, &passphrase, country.as_deref())
+        }
+        Some("clear-wifi") => clear_wifi(),
         Some("complete-setup") => toggle_setup_complete(true),
         Some("require-setup") => toggle_setup_complete(false),
         Some("request-recovery") => toggle_recovery(true),
@@ -44,6 +63,8 @@ fn print_usage() {
     println!("Available commands:");
     println!("  status                    print current ClawPi mode and config state");
     println!("  set-device-name NAME      update the device name in /etc/clawpi/config.toml");
+    println!("  set-wifi SSID PASS [CC]   store setup-mode Wi-Fi credentials");
+    println!("  clear-wifi                remove stored Wi-Fi credentials");
     println!("  complete-setup            mark the setup contract as complete");
     println!("  require-setup             mark the setup contract as pending");
     println!("  request-recovery          force recovery mode on the next activation");
@@ -71,6 +92,7 @@ fn print_status() -> ExitCode {
                 "recovery_status_path={}",
                 layout.recovery_status_path().display()
             );
+            println!("wifi_status_path={}", layout.wifi_status_path().display());
 
             if let Some(config) = state.config_status.as_config() {
                 println!("device_name={}", config.device_name);
@@ -80,6 +102,11 @@ fn print_status() -> ExitCode {
                     config.setup_state.as_str() == "complete"
                 );
                 println!("runtime_profile={}", config.runtime_profile);
+                println!("wifi_country={}", config.wifi_country);
+                println!("wifi_configured={}", config.wifi_ssid.is_some());
+                if let Some(ssid) = &config.wifi_ssid {
+                    println!("wifi_ssid={ssid}");
+                }
             } else {
                 println!("setup_complete=false");
             }
@@ -151,6 +178,24 @@ fn print_status() -> ExitCode {
                 }
             }
 
+            match read_optional_file(&layout.wifi_status_path()) {
+                Ok(Some(content)) => {
+                    println!(
+                        "wifi_status={}",
+                        lookup_field(&content, "status").unwrap_or("unknown")
+                    );
+                    println!(
+                        "wifi_reload={}",
+                        lookup_field(&content, "reload").unwrap_or("unknown")
+                    );
+                }
+                Ok(None) => println!("wifi_status=absent"),
+                Err(err) => {
+                    eprintln!("failed to read wifi status: {err}");
+                    return ExitCode::from(1);
+                }
+            }
+
             ExitCode::SUCCESS
         }
         Err(err) => {
@@ -172,6 +217,40 @@ fn update_device_name(device_name: &str) -> ExitCode {
         }
         Err(err) => {
             eprintln!("failed to update config: {err}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn update_wifi(ssid: &str, passphrase: &str, country: Option<&str>) -> ExitCode {
+    let layout = Layout::detect();
+
+    match set_wifi_credentials(&layout, ssid, passphrase, country) {
+        Ok(config) => {
+            println!("wifi_ssid={}", config.wifi_ssid.as_deref().unwrap_or(""));
+            println!("wifi_country={}", config.wifi_country);
+            println!("mode={}", mode_or_error(&layout));
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("failed to update wifi config: {err}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn clear_wifi() -> ExitCode {
+    let layout = Layout::detect();
+
+    match clear_wifi_credentials(&layout) {
+        Ok(config) => {
+            println!("wifi_configured={}", config.wifi_ssid.is_some());
+            println!("wifi_country={}", config.wifi_country);
+            println!("mode={}", mode_or_error(&layout));
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("failed to clear wifi config: {err}");
             ExitCode::from(1)
         }
     }
