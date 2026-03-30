@@ -475,7 +475,7 @@ impl PortalRuntime {
     fn write_hostapd_config(&self) -> io::Result<()> {
         let country = self.current_wifi_country()?;
         let content = format!(
-            "interface={interface}\ndriver=nl80211\nssid={ssid}\nhw_mode=g\nchannel={channel}\nauth_algs=1\nignore_broadcast_ssid=0\ncountry_code={country}\nieee80211d=1\nwmm_enabled=1\n",
+            "interface={interface}\ndriver=nl80211\nssid={ssid}\nhw_mode=g\nchannel={channel}\nauth_algs=1\nwpa=0\nignore_broadcast_ssid=0\ncountry_code={country}\nieee80211d=1\nwmm_enabled=1\nlogger_stdout=-1\nlogger_stdout_level=0\n",
             interface = AP_INTERFACE,
             ssid = self.setup_ssid,
             channel = AP_CHANNEL,
@@ -486,7 +486,7 @@ impl PortalRuntime {
 
     fn write_dnsmasq_config(&self) -> io::Result<()> {
         let content = format!(
-            "interface={interface}\nbind-interfaces\ndhcp-range={range}\ndhcp-option=3,{gateway}\ndhcp-option=6,{gateway}\naddress=/#/{gateway}\nno-resolv\ndomain-needed\nbogus-priv\ndhcp-leasefile={leases}\n",
+            "interface={interface}\nbind-interfaces\nlisten-address={gateway}\ndhcp-authoritative\ndhcp-range={range}\ndhcp-option=3,{gateway}\ndhcp-option=6,{gateway}\naddress=/#/{gateway}\nno-resolv\ndomain-needed\nbogus-priv\nlog-dhcp\ndhcp-leasefile={leases}\n",
             interface = AP_INTERFACE,
             range = AP_ADDRESS_RANGE,
             gateway = AP_GATEWAY,
@@ -498,7 +498,11 @@ impl PortalRuntime {
 
 impl Drop for PortalRuntime {
     fn drop(&mut self) {
-        let _ = self.stop_setup_network();
+        if self.ap_active {
+            let _ = self.restore_managed_wifi();
+        } else {
+            let _ = self.stop_setup_network();
+        }
     }
 }
 
