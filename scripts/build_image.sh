@@ -95,10 +95,15 @@ EOF
     echo "  $PI_GEN_DIR/config"
     echo "clawpi: running pi-gen with STAGE_LIST:"
     echo "  stage0 stage1 stage2 stage-clawpi"
-    (
+    if ! (
         cd "$PI_GEN_DIR"
         ./build.sh
-    )
+    ); then
+        echo "clawpi: pi-gen build failed" >&2
+        echo "clawpi: on a Debian build host, install pi-gen dependencies with:" >&2
+        echo "  sh ./scripts/install_pi_gen_deps.sh --pi-gen-dir $PI_GEN_DIR" >&2
+        exit 1
+    fi
 else
     echo "clawpi: next step to build with pi-gen:"
     echo "  sh ./scripts/build_image.sh --pi-gen-dir /path/to/pi-gen"

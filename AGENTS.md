@@ -172,6 +172,8 @@ At the end of each task, always report:
 
 1. files changed
 2. commands to run
-3. how to test on Mac
-4. how to test on the current Pi
-5. risks or follow-up work
+3. how to test on the current Pi
+4. risks or follow-up work
+
+When a real Pi proving-ground device is available, do not include a separate
+Mac testing section unless it is specifically needed for the task.

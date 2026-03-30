@@ -119,3 +119,7 @@ current ClawPi payload into a stage bundle under `target/pi-gen/stage-clawpi`.
 
 If you pass `--pi-gen-dir`, the script will also sync `stage-clawpi` into that
 checkout and write a matching `config` file before running `build.sh`.
+
+If the build host is missing `pi-gen` prerequisites, use
+`scripts/install_pi_gen_deps.sh --pi-gen-dir /path/to/pi-gen` on a Debian-based
+machine before running the build.

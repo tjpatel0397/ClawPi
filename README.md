@@ -88,5 +88,6 @@ The repo now includes:
 - a recovery handoff that redirects the device back into setup mode
 - a minimal setup-mode Wi-Fi provisioning path for the current Pi
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout
+- a small `scripts/install_pi_gen_deps.sh` helper for preparing a Debian build host
 
 ClawPi is not a flashable image yet.

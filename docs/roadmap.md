@@ -151,6 +151,7 @@ Current status:
 - the repo now includes an initial custom `pi-gen` stage for ClawPi
 - `scripts/build_image.sh` can assemble that stage from the current proven install path
 - `scripts/build_image.sh` can now sync that stage into a real `pi-gen` checkout and write the matching `config`
+- the repo now includes a small helper for installing `pi-gen` build dependencies on Debian
 - the full end-to-end flashable image flow still needs to be completed
 
 ## Phase 7 — ownership, pairing, and recovery

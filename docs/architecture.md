@@ -179,6 +179,7 @@ The current shape is intentionally small:
 - the stage seeds `/etc/clawpi/config.toml` in pending setup mode
 - the stage enables `clawpi-mode.service` for first boot
 - when given a `pi-gen` checkout, the script syncs `stage-clawpi` into that tree and writes a matching `config`
+- `scripts/install_pi_gen_deps.sh` can prepare a Debian build host using either the checkout's `depends` file or the current upstream dependency set
 
 This is not the full image pipeline yet.
 
