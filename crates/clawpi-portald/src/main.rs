@@ -25,6 +25,7 @@ const AP_CAPPORT_API_PATH: &str = "/.well-known/captive-portal";
 const AP_CAPPORT_API_URL: &str = "http://192.168.64.1/.well-known/captive-portal";
 const AP_CHANNEL: &str = "6";
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
+const RESTORE_TIMEOUT: Duration = Duration::from_secs(20);
 
 fn main() -> ExitCode {
     let layout = Layout::detect();
@@ -287,19 +288,46 @@ impl PortalRuntime {
 
     fn restore_managed_wifi(&mut self) -> io::Result<()> {
         let _ = self.stop_setup_network();
+        let _ = command_succeeds("ip", &["addr", "flush", "dev", AP_INTERFACE]);
         let _ = run_command("ip", &["link", "set", AP_INTERFACE, "up"]);
+
+        for unit in ["wpa_supplicant@wlan0.service", "wpa_supplicant.service"] {
+            let _ = start_unit_if_loaded(unit);
+        }
 
         if let Err(err) = apply_wifi_config(&self.layout) {
             self.last_error = Some(format!("portal rollback failed: {err}"));
             return Err(err);
         }
 
+        let _ = command_succeeds("wpa_cli", &["-i", AP_INTERFACE, "reconnect"]);
+
         for unit in [
-            "wpa_supplicant@wlan0.service",
-            "wpa_supplicant.service",
+            "dhcpcd.service",
+            "ifup@wlan0.service",
+            "systemd-networkd.service",
             "NetworkManager.service",
         ] {
-            let _ = start_unit(unit);
+            let _ = start_unit_if_loaded(unit);
+        }
+
+        if !has_ipv4_address(AP_INTERFACE)? {
+            for (program, args) in [
+                ("dhcpcd", vec!["-n", AP_INTERFACE]),
+                ("ifup", vec![AP_INTERFACE]),
+                ("dhclient", vec!["-1", AP_INTERFACE]),
+                ("udhcpc", vec!["-n", "-q", "-i", AP_INTERFACE]),
+            ] {
+                if command_succeeds(program, &args) {
+                    break;
+                }
+            }
+        }
+
+        if wait_for_ipv4_address(AP_INTERFACE, RESTORE_TIMEOUT)? {
+            self.write_restored_status()?;
+        } else {
+            self.write_restore_failed_status("timed out waiting for wlan0 IPv4 after portal stop")?;
         }
 
         Ok(())
@@ -404,6 +432,28 @@ impl PortalRuntime {
                 "phase=6\nstatus=connected\nmode=normal\nhome_wifi_ssid={}\ntarget={}\n",
                 home_wifi_ssid,
                 Mode::Normal.target_name()
+            ),
+        )
+    }
+
+    fn write_restored_status(&self) -> io::Result<()> {
+        write_status_file(
+            &self.layout,
+            &format!(
+                "phase=6\nstatus=restored-managed-wifi\nmode=setup\nportal_url={}\nportal_fallback_url={}\n",
+                AP_PORTAL_URL, AP_PORTAL_IP_URL
+            ),
+        )
+    }
+
+    fn write_restore_failed_status(&self, error: &str) -> io::Result<()> {
+        write_status_file(
+            &self.layout,
+            &format!(
+                "phase=6\nstatus=restore-failed\nmode=setup\nportal_url={}\nportal_fallback_url={}\nlast_error={}\n",
+                AP_PORTAL_URL,
+                AP_PORTAL_IP_URL,
+                sanitize_status_line(error)
             ),
         )
     }
@@ -528,7 +578,7 @@ impl PortalRuntime {
 
     fn write_dnsmasq_config(&self) -> io::Result<()> {
         let content = format!(
-            "interface={interface}\nbind-interfaces\nlisten-address={gateway}\ndhcp-authoritative\ndhcp-range={range}\ndhcp-option=3,{gateway}\ndhcp-option=6,{gateway}\ndhcp-option-force=114,{capport_api}\naddress=/#/{gateway}\nno-resolv\ndomain-needed\nbogus-priv\nlog-dhcp\ndhcp-leasefile={leases}\n",
+            "interface={interface}\nbind-interfaces\nlisten-address={gateway}\ndhcp-authoritative\ndhcp-broadcast\ndhcp-range={range}\ndhcp-option=3,{gateway}\ndhcp-option=6,{gateway}\ndhcp-option-force=114,{capport_api}\naddress=/#/{gateway}\nno-resolv\ndomain-needed\nbogus-priv\nlog-dhcp\ndhcp-leasefile={leases}\n",
             interface = AP_INTERFACE,
             range = AP_ADDRESS_RANGE,
             gateway = AP_GATEWAY,
@@ -794,6 +844,33 @@ fn stop_child(child: &mut Child) {
     let _ = child.wait();
 }
 
+fn has_ipv4_address(interface: &str) -> io::Result<bool> {
+    let output = match Command::new("ip")
+        .args(["-4", "addr", "show", "dev", interface])
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        Ok(_) => return Ok(false),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err),
+    };
+
+    Ok(String::from_utf8_lossy(&output.stdout).contains("inet "))
+}
+
+fn wait_for_ipv4_address(interface: &str, timeout: Duration) -> io::Result<bool> {
+    let deadline = Instant::now() + timeout;
+
+    while Instant::now() < deadline {
+        if has_ipv4_address(interface)? {
+            return Ok(true);
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    Ok(false)
+}
+
 fn wait_for_wifi_connection(expected_ssid: &str) -> io::Result<bool> {
     let deadline = Instant::now() + JOIN_TIMEOUT;
 
@@ -869,6 +946,25 @@ fn start_unit(unit: &str) -> io::Result<()> {
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err),
     }
+}
+
+fn start_unit_if_loaded(unit: &str) -> io::Result<bool> {
+    let output = match Command::new("systemctl")
+        .args(["show", "-p", "LoadState", "--value", unit])
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        Ok(_) => return Ok(false),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err),
+    };
+
+    if String::from_utf8_lossy(&output.stdout).trim() == "not-found" {
+        return Ok(false);
+    }
+
+    start_unit(unit)?;
+    Ok(true)
 }
 
 #[cfg(test)]
