@@ -2,6 +2,7 @@
 members = [
     "crates/clawpi-core",
     "crates/clawpi-init",
+    "crates/clawpi-recoveryd",
     "crates/clawpi-ctl",
     "crates/clawpi-sessiond",
     "crates/clawpi-setupd",

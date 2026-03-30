@@ -162,7 +162,7 @@ At the moment this looks like:
 - `clawpi-init` only enters normal mode when that config is valid and complete
 - the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` now starts `clawpi-sessiond`, which keeps a minimal runtime heartbeat under `/run/clawpi`
-- `clawpi-recovery.target` is still mostly a placeholder
+- `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
 
 This is a proving-ground path, not the final image design.
 

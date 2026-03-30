@@ -21,6 +21,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clawpi-recoveryd"
+version = "0.1.0"
+dependencies = [
+ "clawpi-core",
+]
+
+[[package]]
 name = "clawpi-sessiond"
 version = "0.1.0"
 dependencies = [

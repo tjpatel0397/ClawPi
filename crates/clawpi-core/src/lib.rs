@@ -158,6 +158,10 @@ impl Layout {
         self.run_dir().join("sessiond.status")
     }
 
+    pub fn recovery_status_path(&self) -> PathBuf {
+        self.run_dir().join("recovery.status")
+    }
+
     pub fn legacy_setup_complete_path(&self) -> PathBuf {
         self.state_dir().join("setup-complete")
     }
@@ -249,6 +253,67 @@ pub fn set_recovery_requested(layout: &Layout, requested: bool) -> io::Result<()
     }
 
     Ok(())
+}
+
+pub fn prepare_setup_fallback(layout: &Layout) -> io::Result<SystemState> {
+    layout.ensure_dirs()?;
+    remove_if_exists(&layout.recovery_requested_path())?;
+
+    let state = match read_config_status(layout)? {
+        ConfigStatus::Missing => {
+            let config = default_config(layout)?;
+            let pending_config = ClawPiConfig {
+                setup_state: SetupState::Pending,
+                ..config
+            };
+            write_config(layout, &pending_config)?;
+            SystemState {
+                mode: Mode::Setup,
+                config_status: ConfigStatus::Valid(pending_config),
+                config_created: true,
+            }
+        }
+        ConfigStatus::Valid(config) => {
+            let pending_config = ClawPiConfig {
+                setup_state: SetupState::Pending,
+                ..config
+            };
+            write_config(layout, &pending_config)?;
+            SystemState {
+                mode: Mode::Setup,
+                config_status: ConfigStatus::Valid(pending_config),
+                config_created: false,
+            }
+        }
+        ConfigStatus::Invalid(reason) => SystemState {
+            mode: Mode::Setup,
+            config_status: ConfigStatus::Invalid(reason),
+            config_created: false,
+        },
+    };
+
+    record_mode(layout, Mode::Setup)?;
+
+    let mut content = format!(
+        "phase=5\nmode={}\nconfig_path={}\nconfig_status={}\n",
+        state.mode.as_str(),
+        layout.config_path().display(),
+        state.config_status.label()
+    );
+
+    if let Some(config) = state.config_status.as_config() {
+        content.push_str(&format!("device_name={}\n", config.device_name));
+        content.push_str(&format!("setup_state={}\n", config.setup_state.as_str()));
+    }
+
+    if let Some(reason) = state.config_status.error() {
+        content.push_str(&format!("config_error={reason}\n"));
+    }
+
+    content.push_str("status=redirected-to-setup\n");
+    fs::write(layout.recovery_status_path(), content)?;
+
+    Ok(state)
 }
 
 pub fn record_mode(layout: &Layout, mode: Mode) -> io::Result<()> {
@@ -521,7 +586,7 @@ mod tests {
         assert_eq!(state.mode, Mode::Setup);
         assert_eq!(state.config_status, ConfigStatus::Missing);
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_test_root(&root);
     }
 
     #[test]
@@ -542,7 +607,7 @@ mod tests {
         assert_eq!(config.setup_state, SetupState::Pending);
         assert!(layout.config_path().exists());
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_test_root(&root);
     }
 
     #[test]
@@ -567,7 +632,7 @@ mod tests {
         assert_eq!(config.setup_state, SetupState::Complete);
         assert!(!layout.legacy_setup_complete_path().exists());
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_test_root(&root);
     }
 
     #[test]
@@ -585,7 +650,7 @@ mod tests {
         assert_eq!(config.device_name, "clawpi-cm5");
         assert_eq!(config.setup_state, SetupState::Pending);
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_test_root(&root);
     }
 
     #[test]
@@ -605,7 +670,7 @@ mod tests {
         assert_eq!(state.mode, Mode::Setup);
         assert!(matches!(state.config_status, ConfigStatus::Invalid(_)));
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_test_root(&root);
     }
 
     #[test]
@@ -624,7 +689,33 @@ mod tests {
             Some(String::from("normal"))
         );
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_test_root(&root);
+    }
+
+    #[test]
+    fn prepare_setup_fallback_clears_recovery_and_sets_pending() {
+        let root = unique_test_root();
+        let layout = Layout::from_root(&root);
+
+        set_device_name(&layout, "clawpi-cm5").unwrap();
+        mark_setup_complete(&layout, true).unwrap();
+        set_recovery_requested(&layout, true).unwrap();
+
+        let state = prepare_setup_fallback(&layout).unwrap();
+
+        assert_eq!(state.mode, Mode::Setup);
+        let config = match state.config_status {
+            ConfigStatus::Valid(config) => config,
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => panic!("expected config"),
+        };
+        assert_eq!(config.setup_state, SetupState::Pending);
+        assert!(!layout.recovery_requested_path().exists());
+        assert_eq!(
+            read_optional_file(&layout.active_mode_path()).unwrap(),
+            Some(String::from("setup"))
+        );
+
+        cleanup_test_root(&root);
     }
 
     fn unique_test_root() -> PathBuf {
@@ -635,5 +726,9 @@ mod tests {
         let root = env::temp_dir().join(format!("clawpi-core-test-{}-{nonce}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    fn cleanup_test_root(root: &Path) {
+        let _ = fs::remove_dir_all(root);
     }
 }

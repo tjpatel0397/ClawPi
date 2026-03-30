@@ -1,0 +1,9 @@
+[Unit]
+Description=ClawPi proving-ground recovery service
+ConditionPathExists=/usr/local/libexec/clawpi/clawpi-recoveryd
+PartOf=clawpi-recovery.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/clawpi/clawpi-recoveryd

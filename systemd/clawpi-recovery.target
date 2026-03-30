@@ -2,3 +2,4 @@
 Description=ClawPi recovery target
 AllowIsolate=yes
 StopWhenUnneeded=yes
+Wants=clawpi-recoveryd.service

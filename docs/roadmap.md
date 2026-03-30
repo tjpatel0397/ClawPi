@@ -122,6 +122,12 @@ Outputs:
 - setup fallback behavior
 - clearer recovery into setup mode
 
+Current status:
+
+- the repo now includes a recovery service that redirects recovery mode back into setup mode
+- setup fallback behavior is starting to take shape on the proving-ground Pi
+- Wi-Fi setup is still not implemented
+
 This is the point where a fresh flash starts feeling much more usable.
 
 ## Phase 6 — build the first flashable image

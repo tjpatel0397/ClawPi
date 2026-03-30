@@ -67,6 +67,10 @@ fn print_status() -> ExitCode {
                 "session_status_path={}",
                 layout.session_status_path().display()
             );
+            println!(
+                "recovery_status_path={}",
+                layout.recovery_status_path().display()
+            );
 
             if let Some(config) = state.config_status.as_config() {
                 println!("device_name={}", config.device_name);
@@ -125,6 +129,24 @@ fn print_status() -> ExitCode {
                 Ok(None) => println!("session_status=absent"),
                 Err(err) => {
                     eprintln!("failed to read session status: {err}");
+                    return ExitCode::from(1);
+                }
+            }
+
+            match read_optional_file(&layout.recovery_status_path()) {
+                Ok(Some(content)) => {
+                    println!(
+                        "recovery_status={}",
+                        lookup_field(&content, "status").unwrap_or("unknown")
+                    );
+                    println!(
+                        "recovery_mode={}",
+                        lookup_field(&content, "mode").unwrap_or("unknown")
+                    );
+                }
+                Ok(None) => println!("recovery_status=absent"),
+                Err(err) => {
+                    eprintln!("failed to read recovery status: {err}");
                     return ExitCode::from(1);
                 }
             }

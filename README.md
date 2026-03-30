@@ -85,5 +85,6 @@ The repo now includes:
 - a proving-ground install path for the current DietPi-based CM5
 - a minimal setup contract built around `/etc/clawpi/config.toml`
 - a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
+- a recovery handoff that redirects the device back into setup mode
 
 ClawPi is not a flashable image yet.
