@@ -170,6 +170,14 @@ impl Layout {
         self.run_dir().join("wifi.status")
     }
 
+    pub fn wpa_supplicant_run_dir(&self) -> PathBuf {
+        self.root.join("run").join("wpa_supplicant")
+    }
+
+    pub fn wpa_supplicant_control_path(&self) -> PathBuf {
+        self.wpa_supplicant_run_dir().join("wlan0")
+    }
+
     pub fn wpa_supplicant_dir(&self) -> PathBuf {
         self.root.join("etc").join("wpa_supplicant")
     }
@@ -415,12 +423,14 @@ pub fn apply_wifi_config(layout: &Layout) -> io::Result<()> {
             );
             fs::write(layout.wpa_supplicant_config_path(), file_content)?;
 
-            let reload = try_reload_wifi()?;
+            let reload = try_reload_wifi(layout)?;
             format!(
-                "phase=5\nstatus=configured\nwifi_ssid={}\nwifi_country={}\nwpa_supplicant_path={}\nreload={reload}\n",
+                "phase=5\nstatus={}\nwifi_ssid={}\nwifi_country={}\nwpa_supplicant_path={}\nreload={}\n",
+                reload.status,
                 ssid,
                 config.wifi_country,
-                layout.wpa_supplicant_config_path().display()
+                layout.wpa_supplicant_config_path().display(),
+                reload.command,
             )
         }
     };
@@ -729,25 +739,59 @@ fn normalize_wifi_country(value: &str) -> Result<String, String> {
     Ok(trimmed.to_ascii_uppercase())
 }
 
-fn try_reload_wifi() -> io::Result<String> {
-    let attempts = [
-        ("systemctl", vec!["restart", "wpa_supplicant@wlan0.service"]),
-        ("systemctl", vec!["restart", "wpa_supplicant.service"]),
-        ("wpa_cli", vec!["-i", "wlan0", "reconfigure"]),
-    ];
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct WifiReloadOutcome {
+    status: &'static str,
+    command: String,
+}
 
-    for (program, args) in attempts {
-        match std::process::Command::new(program).args(&args).status() {
-            Ok(status) if status.success() => {
-                return Ok(format!("{program} {}", args.join(" ")));
+fn try_reload_wifi(layout: &Layout) -> io::Result<WifiReloadOutcome> {
+    if layout.wpa_supplicant_control_path().exists() {
+        for args in [
+            ["-i", "wlan0", "reconfigure"],
+            ["-i", "wlan0", "reassociate"],
+        ] {
+            if command_succeeds("wpa_cli", &args)? {
+                return Ok(WifiReloadOutcome {
+                    status: "configured",
+                    command: format!("wpa_cli {}", args.join(" ")),
+                });
             }
-            Ok(_) => continue,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-            Err(_) => continue,
+        }
+
+        return Ok(WifiReloadOutcome {
+            status: "staged",
+            command: String::from("manual-reload-needed"),
+        });
+    }
+
+    for unit in ["wpa_supplicant@wlan0.service", "wpa_supplicant.service"] {
+        if systemd_unit_is_active(unit)?
+            && command_succeeds("systemctl", &["reload-or-restart", unit])?
+        {
+            return Ok(WifiReloadOutcome {
+                status: "configured",
+                command: format!("systemctl reload-or-restart {unit}"),
+            });
         }
     }
 
-    Ok(String::from("manual-reload-needed"))
+    Ok(WifiReloadOutcome {
+        status: "staged",
+        command: String::from("manual-reload-needed"),
+    })
+}
+
+fn systemd_unit_is_active(unit: &str) -> io::Result<bool> {
+    command_succeeds("systemctl", &["is-active", "--quiet", unit])
+}
+
+fn command_succeeds(program: &str, args: &[&str]) -> io::Result<bool> {
+    match std::process::Command::new(program).args(args).status() {
+        Ok(status) => Ok(status.success()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Ok(false),
+    }
 }
 
 fn invalid_data(reason: String) -> io::Error {
