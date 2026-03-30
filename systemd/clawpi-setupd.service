@@ -7,4 +7,3 @@ After=local-fs.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/libexec/clawpi/clawpi-setupd --once
-RemainAfterExit=yes

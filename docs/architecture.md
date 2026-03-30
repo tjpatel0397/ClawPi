@@ -160,6 +160,7 @@ At the moment this looks like:
 - `clawpi-setup.target` starts `clawpi-setupd`
 - `clawpi-setupd` seeds or validates `/etc/clawpi/config.toml`
 - `clawpi-init` only enters normal mode when that config is valid and complete
+- the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` and `clawpi-recovery.target` are still mostly placeholders
 
 This is a proving-ground path, not the final image design.
