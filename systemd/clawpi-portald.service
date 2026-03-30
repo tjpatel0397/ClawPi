@@ -7,5 +7,3 @@ After=local-fs.target clawpi-setupd.service
 [Service]
 Type=simple
 ExecStart=/usr/local/libexec/clawpi/clawpi-portald
-Restart=on-failure
-RestartSec=2

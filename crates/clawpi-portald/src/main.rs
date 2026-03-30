@@ -58,8 +58,15 @@ fn run(layout: &Layout) -> io::Result<()> {
         should_exit: false,
     };
 
-    runtime.start_setup_network()?;
-    runtime.serve()
+    match runtime.start_setup_network() {
+        Ok(()) => runtime.serve(),
+        Err(err) => {
+            let reason = err.to_string();
+            let _ = runtime.restore_managed_wifi();
+            let _ = runtime.write_failed_status(&reason);
+            Err(io::Error::new(err.kind(), reason))
+        }
+    }
 }
 
 struct PortalRuntime {
@@ -188,7 +195,7 @@ impl PortalRuntime {
         mark_setup_complete(&self.layout, true)?;
         record_mode(&self.layout, Mode::Normal)?;
         self.write_connected_status(expected_ssid)?;
-        start_target(Mode::Normal.target_name())?;
+        start_unit(Mode::Normal.target_name())?;
 
         Ok(())
     }
@@ -196,6 +203,7 @@ impl PortalRuntime {
     fn start_setup_network(&mut self) -> io::Result<()> {
         self.stop_setup_network()?;
         fs::create_dir_all(&self.portal_dir)?;
+        self.write_starting_status()?;
 
         self.write_hostapd_config()?;
         self.write_dnsmasq_config()?;
@@ -232,6 +240,26 @@ impl PortalRuntime {
         self.dnsmasq_child = Some(dnsmasq);
         self.ap_active = true;
         self.write_setup_network_status(&country)?;
+
+        Ok(())
+    }
+
+    fn restore_managed_wifi(&mut self) -> io::Result<()> {
+        let _ = self.stop_setup_network();
+        let _ = run_command("ip", &["link", "set", AP_INTERFACE, "up"]);
+
+        if let Err(err) = apply_wifi_config(&self.layout) {
+            self.last_error = Some(format!("portal rollback failed: {err}"));
+            return Err(err);
+        }
+
+        for unit in [
+            "wpa_supplicant@wlan0.service",
+            "wpa_supplicant.service",
+            "NetworkManager.service",
+        ] {
+            let _ = start_unit(unit);
+        }
 
         Ok(())
     }
@@ -300,6 +328,16 @@ impl PortalRuntime {
             &format!(
                 "phase=6\nstatus=joining-home-wifi\nmode=setup\nsetup_ssid={}\nportal_url={}\nhome_wifi_ssid={}\n",
                 self.setup_ssid, AP_PORTAL_URL, home_wifi_ssid
+            ),
+        )
+    }
+
+    fn write_starting_status(&self) -> io::Result<()> {
+        write_status_file(
+            &self.layout,
+            &format!(
+                "phase=6\nstatus=starting-setup-network\nmode=setup\nsetup_ssid={}\nportal_url={}\n",
+                self.setup_ssid, AP_PORTAL_URL
             ),
         )
     }
@@ -764,9 +802,9 @@ fn sanitize_status_line(value: &str) -> String {
         .collect()
 }
 
-fn start_target(target: &str) -> io::Result<()> {
+fn start_unit(unit: &str) -> io::Result<()> {
     match Command::new("systemctl")
-        .args(["--no-block", "start", target])
+        .args(["--no-block", "start", unit])
         .status()
     {
         Ok(status) if status.success() => Ok(()),
