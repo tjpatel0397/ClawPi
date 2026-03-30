@@ -214,6 +214,10 @@ fn print_status() -> ExitCode {
                         "portal_url={}",
                         lookup_field(&content, "portal_url").unwrap_or("unknown")
                     );
+                    println!(
+                        "portal_fallback_url={}",
+                        lookup_field(&content, "portal_fallback_url").unwrap_or("unknown")
+                    );
                 }
                 Ok(None) => println!("portal_status=absent"),
                 Err(err) => {

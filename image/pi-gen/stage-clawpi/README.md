@@ -8,6 +8,7 @@ It is intentionally narrow:
 - install the current ClawPi binaries
 - install the current ClawPi systemd units
 - install the runtime packages needed for setup networking
+- install the runtime packages needed for captive-style setup networking
 - seed `/etc/clawpi/config.toml` into pending setup mode
 - mask distro-managed `hostapd` and `dnsmasq` units so ClawPi owns setup mode
 - enable `clawpi-mode.service` for first boot

@@ -126,7 +126,9 @@ applied.
 
 The stage also installs `hostapd` and `dnsmasq`, masks their distro-managed
 systemd units, and enables the ClawPi-owned onboarding service that opens a
-temporary setup network and local setup page on first boot.
+temporary setup network and local setup page on first boot, including
+captive-portal hints and a direct `http://192.168.64.1/` fallback when local
+DNS does not resolve `setup.clawpi`.
 
 If the build host is missing `pi-gen` prerequisites, use
 `scripts/install_pi_gen_deps.sh --pi-gen-dir /path/to/pi-gen` on a Debian-based

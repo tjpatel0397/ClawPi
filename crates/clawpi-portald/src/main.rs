@@ -2,12 +2,16 @@ use clawpi_core::{
     apply_wifi_config, inspect_state, mark_setup_complete, read_optional_file, record_mode,
     set_device_name, set_wifi_credentials, ConfigStatus, Layout, Mode, DEFAULT_WIFI_COUNTRY,
 };
+use signal_hook::consts::signal::{SIGINT, SIGTERM};
+use signal_hook::flag as signal_flag;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitCode, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -16,6 +20,9 @@ const AP_GATEWAY: &str = "192.168.64.1";
 const AP_CIDR: &str = "192.168.64.1/24";
 const AP_ADDRESS_RANGE: &str = "192.168.64.50,192.168.64.150,255.255.255.0,12h";
 const AP_PORTAL_URL: &str = "http://setup.clawpi/";
+const AP_PORTAL_IP_URL: &str = "http://192.168.64.1/";
+const AP_CAPPORT_API_PATH: &str = "/.well-known/captive-portal";
+const AP_CAPPORT_API_URL: &str = "http://192.168.64.1/.well-known/captive-portal";
 const AP_CHANNEL: &str = "6";
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -44,13 +51,21 @@ fn run(layout: &Layout) -> io::Result<()> {
         return Ok(());
     }
 
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    signal_flag::register(SIGTERM, Arc::clone(&shutdown_requested))
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+    signal_flag::register(SIGINT, Arc::clone(&shutdown_requested))
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+
     let listener = TcpListener::bind("0.0.0.0:80")?;
+    listener.set_nonblocking(true)?;
     let setup_ssid = build_setup_ssid();
     let mut runtime = PortalRuntime {
         layout: layout.clone(),
         setup_ssid,
         portal_dir: layout.run_dir().join("portal"),
         listener,
+        shutdown_requested,
         hostapd_child: None,
         dnsmasq_child: None,
         ap_active: false,
@@ -74,6 +89,7 @@ struct PortalRuntime {
     setup_ssid: String,
     portal_dir: PathBuf,
     listener: TcpListener,
+    shutdown_requested: Arc<AtomicBool>,
     hostapd_child: Option<Child>,
     dnsmasq_child: Option<Child>,
     ap_active: bool,
@@ -83,9 +99,14 @@ struct PortalRuntime {
 
 impl PortalRuntime {
     fn serve(&mut self) -> io::Result<()> {
-        while !self.should_exit {
-            let (stream, _) = self.listener.accept()?;
-            self.handle_connection(stream)?;
+        while !self.should_exit && !self.shutdown_requested.load(Ordering::Relaxed) {
+            match self.listener.accept() {
+                Ok((stream, _)) => self.handle_connection(stream)?,
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(200));
+                }
+                Err(err) => return Err(err),
+            }
         }
 
         Ok(())
@@ -106,10 +127,30 @@ impl PortalRuntime {
         };
 
         match (request.method.as_str(), request.normalized_path().as_str()) {
+            ("GET", AP_CAPPORT_API_PATH) => {
+                write_http_response(
+                    &mut stream,
+                    "200 OK",
+                    "application/captive+json",
+                    format!(
+                        "{{\"captive\":true,\"user-portal-url\":\"{}\"}}",
+                        AP_PORTAL_IP_URL
+                    ),
+                )?;
+            }
             ("GET", "/status") => {
                 let body = read_optional_file(&self.layout.portal_status_path())?
                     .unwrap_or_else(|| String::from("status=unknown\n"));
                 write_http_response(&mut stream, "200 OK", "text/plain; charset=utf-8", body)?;
+            }
+            ("GET", "/hotspot-detect.html")
+            | ("GET", "/generate_204")
+            | ("GET", "/gen_204")
+            | ("GET", "/connecttest.txt")
+            | ("GET", "/ncsi.txt")
+            | ("GET", "/success.txt")
+            | ("GET", "/library/test/success.html") => {
+                write_http_redirect(&mut stream, AP_PORTAL_IP_URL)?;
             }
             ("POST", "/configure") => {
                 if let Err(err) = self.apply_form(&request.body) {
@@ -311,8 +352,8 @@ impl PortalRuntime {
 
     fn write_setup_network_status(&self, country: &str) -> io::Result<()> {
         let mut content = format!(
-            "phase=6\nstatus=setup-network-active\nmode=setup\nsetup_ssid={}\nportal_url={}\nap_address={}\nwifi_country={}\n",
-            self.setup_ssid, AP_PORTAL_URL, AP_GATEWAY, country
+            "phase=6\nstatus=setup-network-active\nmode=setup\nsetup_ssid={}\nportal_url={}\nportal_fallback_url={}\nap_address={}\nwifi_country={}\n",
+            self.setup_ssid, AP_PORTAL_URL, AP_PORTAL_IP_URL, AP_GATEWAY, country
         );
 
         if let Some(error) = &self.last_error {
@@ -326,8 +367,8 @@ impl PortalRuntime {
         write_status_file(
             &self.layout,
             &format!(
-                "phase=6\nstatus=joining-home-wifi\nmode=setup\nsetup_ssid={}\nportal_url={}\nhome_wifi_ssid={}\n",
-                self.setup_ssid, AP_PORTAL_URL, home_wifi_ssid
+                "phase=6\nstatus=joining-home-wifi\nmode=setup\nsetup_ssid={}\nportal_url={}\nportal_fallback_url={}\nhome_wifi_ssid={}\n",
+                self.setup_ssid, AP_PORTAL_URL, AP_PORTAL_IP_URL, home_wifi_ssid
             ),
         )
     }
@@ -336,8 +377,8 @@ impl PortalRuntime {
         write_status_file(
             &self.layout,
             &format!(
-                "phase=6\nstatus=starting-setup-network\nmode=setup\nsetup_ssid={}\nportal_url={}\n",
-                self.setup_ssid, AP_PORTAL_URL
+                "phase=6\nstatus=starting-setup-network\nmode=setup\nsetup_ssid={}\nportal_url={}\nportal_fallback_url={}\n",
+                self.setup_ssid, AP_PORTAL_URL, AP_PORTAL_IP_URL
             ),
         )
     }
@@ -346,9 +387,10 @@ impl PortalRuntime {
         write_status_file(
             &self.layout,
             &format!(
-                "phase=6\nstatus=setup-network-active\nmode=setup\nsetup_ssid={}\nportal_url={}\nap_address={}\nlast_error={}\n",
+                "phase=6\nstatus=setup-network-active\nmode=setup\nsetup_ssid={}\nportal_url={}\nportal_fallback_url={}\nap_address={}\nlast_error={}\n",
                 self.setup_ssid,
                 AP_PORTAL_URL,
+                AP_PORTAL_IP_URL,
                 AP_GATEWAY,
                 sanitize_status_line(error)
             ),
@@ -486,10 +528,11 @@ impl PortalRuntime {
 
     fn write_dnsmasq_config(&self) -> io::Result<()> {
         let content = format!(
-            "interface={interface}\nbind-interfaces\nlisten-address={gateway}\ndhcp-authoritative\ndhcp-range={range}\ndhcp-option=3,{gateway}\ndhcp-option=6,{gateway}\naddress=/#/{gateway}\nno-resolv\ndomain-needed\nbogus-priv\nlog-dhcp\ndhcp-leasefile={leases}\n",
+            "interface={interface}\nbind-interfaces\nlisten-address={gateway}\ndhcp-authoritative\ndhcp-range={range}\ndhcp-option=3,{gateway}\ndhcp-option=6,{gateway}\ndhcp-option-force=114,{capport_api}\naddress=/#/{gateway}\nno-resolv\ndomain-needed\nbogus-priv\nlog-dhcp\ndhcp-leasefile={leases}\n",
             interface = AP_INTERFACE,
             range = AP_ADDRESS_RANGE,
             gateway = AP_GATEWAY,
+            capport_api = AP_CAPPORT_API_URL,
             leases = self.dnsmasq_leases_path().display(),
         );
         fs::write(self.dnsmasq_config_path(), content)
@@ -611,6 +654,13 @@ fn write_http_response(
         "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
         body.as_bytes().len(),
         body
+    );
+    stream.write_all(response.as_bytes())
+}
+
+fn write_http_redirect(stream: &mut TcpStream, location: &str) -> io::Result<()> {
+    let response = format!(
+        "HTTP/1.1 302 Found\r\nLocation: {location}\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
     );
     stream.write_all(response.as_bytes())
 }

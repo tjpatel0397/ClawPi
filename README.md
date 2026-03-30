@@ -84,7 +84,7 @@ The repo now includes:
 - early systemd targets and services for boot-mode selection
 - a proving-ground install path for the current DietPi-based CM5
 - a minimal setup contract built around `/etc/clawpi/config.toml`
-- a first headless onboarding path that opens a temporary ClawPi setup network and local setup page in setup mode
+- a first headless onboarding path that opens a temporary ClawPi setup network and local setup page in setup mode, with captive-portal hints and a direct `http://192.168.64.1/` fallback
 - a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
 - a recovery handoff that redirects the device back into setup mode
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout

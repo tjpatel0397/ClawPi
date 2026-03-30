@@ -159,7 +159,7 @@ At the moment this looks like:
 - `clawpi-init` chooses a target based on simple local state
 - `clawpi-setup.target` starts `clawpi-setupd` and `clawpi-portald`
 - `clawpi-setupd` seeds or validates `/etc/clawpi/config.toml`
-- `clawpi-portald` opens a temporary setup network like `ClawPi Setup XXXX` and serves a local setup page at `http://setup.clawpi/`
+- `clawpi-portald` opens a temporary setup network like `ClawPi Setup XXXX`, answers captive-portal probes, and serves a local setup page at `http://setup.clawpi/` with `http://192.168.64.1/` as the direct fallback
 - when the user submits home Wi-Fi details, `clawpi-portald` writes them into `/etc/clawpi/config.toml`, tears down the setup network, applies the `wpa_supplicant` config, and waits for the device to join the real network
 - `clawpi-init` only enters normal mode when that config is valid and complete
 - `clawpi-portald` marks setup complete only after the device has joined the submitted Wi-Fi network and then starts `clawpi.target`
