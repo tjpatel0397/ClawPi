@@ -7,6 +7,37 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 OUT_DIR=$REPO_ROOT/target/pi-gen
 PI_GEN_DIR=
 
+pi_gen_branch() {
+    if command -v git >/dev/null 2>&1; then
+        git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null || true
+    fi
+}
+
+host_page_size() {
+    getconf PAGESIZE 2>/dev/null || true
+}
+
+preflight_pi_gen_host() {
+    branch=$(pi_gen_branch "$PI_GEN_DIR")
+    page_size=$(host_page_size)
+
+    case "$page_size" in
+        ''|*[!0-9]*)
+            return 0
+            ;;
+    esac
+
+    if [ "$page_size" -gt 4096 ] && [ "$branch" != "arm64" ]; then
+        echo "clawpi: pi-gen preflight failed" >&2
+        echo "clawpi: host page size is $page_size, which is not compatible with default armhf image builds" >&2
+        echo "clawpi: current pi-gen branch is '${branch:-unknown}'" >&2
+        echo "clawpi: on this host, use the pi-gen arm64 branch before building:" >&2
+        echo "  git -C $PI_GEN_DIR fetch origin arm64" >&2
+        echo "  git -C $PI_GEN_DIR switch arm64" >&2
+        exit 1
+    fi
+}
+
 usage() {
     cat <<'EOF'
 Usage: scripts/build_image.sh [--out PATH] [--pi-gen-dir PATH]
@@ -77,6 +108,8 @@ if [ -n "$PI_GEN_DIR" ]; then
         echo "pi-gen build.sh not found in $PI_GEN_DIR" >&2
         exit 1
     fi
+
+    preflight_pi_gen_host
 
     PI_GEN_STAGE_DIR=$PI_GEN_DIR/stage-clawpi
     rm -rf "$PI_GEN_STAGE_DIR"

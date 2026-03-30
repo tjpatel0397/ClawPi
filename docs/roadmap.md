@@ -152,6 +152,7 @@ Current status:
 - `scripts/build_image.sh` can assemble that stage from the current proven install path
 - `scripts/build_image.sh` can now sync that stage into a real `pi-gen` checkout and write the matching `config`
 - the repo now includes a small helper for installing `pi-gen` build dependencies on Debian
+- the build path now checks for the current CM5/DietPi `16k` page-size mismatch and points the user to the `pi-gen` `arm64` branch
 - the full end-to-end flashable image flow still needs to be completed
 
 ## Phase 7 — ownership, pairing, and recovery

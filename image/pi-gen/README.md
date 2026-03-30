@@ -123,3 +123,7 @@ checkout and write a matching `config` file before running `build.sh`.
 If the build host is missing `pi-gen` prerequisites, use
 `scripts/install_pi_gen_deps.sh --pi-gen-dir /path/to/pi-gen` on a Debian-based
 machine before running the build.
+
+On CM5-class arm64 hosts running a `16k` page-size kernel, a default `pi-gen`
+`master` checkout is the wrong target because it builds the `armhf` path. Use
+the `arm64` branch for those hosts before running `scripts/build_image.sh`.
