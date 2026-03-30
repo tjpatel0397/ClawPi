@@ -7,6 +7,29 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 ROOT_DIR=/
 ENABLE_UNITS=1
 
+ensure_runtime_packages() {
+    if [ "$ROOT_DIR" != "/" ] || [ "$(uname -s)" != "Linux" ]; then
+        return 0
+    fi
+
+    if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
+        return 0
+    fi
+
+    missing_packages=
+    for package in hostapd dnsmasq; do
+        if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+            missing_packages="${missing_packages} ${package}"
+        fi
+    done
+
+    if [ -n "$missing_packages" ]; then
+        apt-get update
+        # shellcheck disable=SC2086
+        apt-get install -y $missing_packages
+    fi
+}
+
 usage() {
     cat <<'EOF'
 Usage: scripts/install_dev_on_pi.sh [--root PATH] [--no-enable]
@@ -50,6 +73,8 @@ if [ "$ROOT_DIR" = "/" ] && [ "$(uname -s)" != "Linux" ]; then
     exit 1
 fi
 
+ensure_runtime_packages
+
 cd "$REPO_ROOT"
 cargo build --release
 
@@ -66,6 +91,7 @@ install -m 0755 target/release/clawpi-recoveryd "$LIBEXEC_DIR/clawpi-recoveryd"
 install -m 0755 target/release/clawpi-setupd "$LIBEXEC_DIR/clawpi-setupd"
 install -m 0755 target/release/clawpi-sessiond "$LIBEXEC_DIR/clawpi-sessiond"
 install -m 0755 target/release/clawpi-wifid "$LIBEXEC_DIR/clawpi-wifid"
+install -m 0755 target/release/clawpi-portald "$LIBEXEC_DIR/clawpi-portald"
 install -m 0755 target/release/clawpi-ctl "$BIN_DIR/clawpi-ctl"
 
 install -m 0644 systemd/clawpi.target "$SYSTEMD_DIR/clawpi.target"
@@ -73,9 +99,13 @@ install -m 0644 systemd/clawpi-setup.target "$SYSTEMD_DIR/clawpi-setup.target"
 install -m 0644 systemd/clawpi-recovery.target "$SYSTEMD_DIR/clawpi-recovery.target"
 install -m 0644 systemd/clawpi-mode.service "$SYSTEMD_DIR/clawpi-mode.service"
 install -m 0644 systemd/clawpi-recoveryd.service "$SYSTEMD_DIR/clawpi-recoveryd.service"
+install -m 0644 systemd/clawpi-portald.service "$SYSTEMD_DIR/clawpi-portald.service"
 install -m 0644 systemd/clawpi-setupd.service "$SYSTEMD_DIR/clawpi-setupd.service"
 install -m 0644 systemd/clawpi-sessiond.service "$SYSTEMD_DIR/clawpi-sessiond.service"
 install -m 0644 systemd/clawpi-wifid.service "$SYSTEMD_DIR/clawpi-wifid.service"
+
+ln -snf /dev/null "$SYSTEMD_DIR/hostapd.service"
+ln -snf /dev/null "$SYSTEMD_DIR/dnsmasq.service"
 
 if [ "$ROOT_DIR" = "/" ]; then
     "$LIBEXEC_DIR/clawpi-setupd" --once
@@ -101,9 +131,11 @@ echo "  $LIBEXEC_DIR/clawpi-recoveryd"
 echo "  $LIBEXEC_DIR/clawpi-setupd"
 echo "  $LIBEXEC_DIR/clawpi-sessiond"
 echo "  $LIBEXEC_DIR/clawpi-wifid"
+echo "  $LIBEXEC_DIR/clawpi-portald"
 echo "  $BIN_DIR/clawpi-ctl"
 echo "clawpi: systemd units:"
 echo "  $SYSTEMD_DIR/clawpi-mode.service"
+echo "  $SYSTEMD_DIR/clawpi-portald.service"
 echo "  $SYSTEMD_DIR/clawpi-recoveryd.service"
 echo "  $SYSTEMD_DIR/clawpi-sessiond.service"
 echo "  $SYSTEMD_DIR/clawpi-setupd.service"
@@ -111,6 +143,9 @@ echo "  $SYSTEMD_DIR/clawpi-wifid.service"
 echo "  $SYSTEMD_DIR/clawpi.target"
 echo "  $SYSTEMD_DIR/clawpi-setup.target"
 echo "  $SYSTEMD_DIR/clawpi-recovery.target"
+echo "clawpi: masked distro services:"
+echo "  $SYSTEMD_DIR/hostapd.service"
+echo "  $SYSTEMD_DIR/dnsmasq.service"
 echo "clawpi: setup contract:"
 echo "  $CONFIG_DIR/config.toml"
 

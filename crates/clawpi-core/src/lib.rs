@@ -170,6 +170,10 @@ impl Layout {
         self.run_dir().join("wifi.status")
     }
 
+    pub fn portal_status_path(&self) -> PathBuf {
+        self.run_dir().join("portal.status")
+    }
+
     pub fn wpa_supplicant_run_dir(&self) -> PathBuf {
         self.root.join("run").join("wpa_supplicant")
     }
@@ -766,9 +770,7 @@ fn try_reload_wifi(layout: &Layout) -> io::Result<WifiReloadOutcome> {
     }
 
     for unit in ["wpa_supplicant@wlan0.service", "wpa_supplicant.service"] {
-        if systemd_unit_is_active(unit)?
-            && command_succeeds("systemctl", &["reload-or-restart", unit])?
-        {
+        if command_succeeds("systemctl", &["reload-or-restart", unit])? {
             return Ok(WifiReloadOutcome {
                 status: "configured",
                 command: format!("systemctl reload-or-restart {unit}"),
@@ -780,10 +782,6 @@ fn try_reload_wifi(layout: &Layout) -> io::Result<WifiReloadOutcome> {
         status: "staged",
         command: String::from("manual-reload-needed"),
     })
-}
-
-fn systemd_unit_is_active(unit: &str) -> io::Result<bool> {
-    command_succeeds("systemctl", &["is-active", "--quiet", unit])
 }
 
 fn command_succeeds(program: &str, args: &[&str]) -> io::Result<bool> {

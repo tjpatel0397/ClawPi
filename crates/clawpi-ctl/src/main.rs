@@ -93,6 +93,10 @@ fn print_status() -> ExitCode {
                 layout.recovery_status_path().display()
             );
             println!("wifi_status_path={}", layout.wifi_status_path().display());
+            println!(
+                "portal_status_path={}",
+                layout.portal_status_path().display()
+            );
 
             if let Some(config) = state.config_status.as_config() {
                 println!("device_name={}", config.device_name);
@@ -192,6 +196,28 @@ fn print_status() -> ExitCode {
                 Ok(None) => println!("wifi_status=absent"),
                 Err(err) => {
                     eprintln!("failed to read wifi status: {err}");
+                    return ExitCode::from(1);
+                }
+            }
+
+            match read_optional_file(&layout.portal_status_path()) {
+                Ok(Some(content)) => {
+                    println!(
+                        "portal_status={}",
+                        lookup_field(&content, "status").unwrap_or("unknown")
+                    );
+                    println!(
+                        "portal_setup_ssid={}",
+                        lookup_field(&content, "setup_ssid").unwrap_or("unknown")
+                    );
+                    println!(
+                        "portal_url={}",
+                        lookup_field(&content, "portal_url").unwrap_or("unknown")
+                    );
+                }
+                Ok(None) => println!("portal_status=absent"),
+                Err(err) => {
+                    eprintln!("failed to read portal status: {err}");
                     return ExitCode::from(1);
                 }
             }

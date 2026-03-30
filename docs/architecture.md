@@ -151,16 +151,18 @@ The current proving-ground path is intentionally small:
 - install ClawPi binaries onto the current Pi
 - install systemd units and targets onto the current Pi
 - use a small mode-selection step at boot to choose setup, normal, or recovery
-- keep setup behavior minimal until the first real setup flow is designed
+- keep the setup behavior OS-owned and headless-first
 
 At the moment this looks like:
 
 - `clawpi-mode.service` runs during boot on the current Pi
 - `clawpi-init` chooses a target based on simple local state
-- `clawpi-setup.target` starts `clawpi-setupd`
+- `clawpi-setup.target` starts `clawpi-setupd` and `clawpi-portald`
 - `clawpi-setupd` seeds or validates `/etc/clawpi/config.toml`
-- `clawpi-wifid` can turn stored setup-mode Wi-Fi settings into a `wpa_supplicant` config on the current Pi and prefers reconfiguring an existing supplicant over forcing a restart
+- `clawpi-portald` opens a temporary setup network like `ClawPi Setup XXXX` and serves a local setup page at `http://setup.clawpi/`
+- when the user submits home Wi-Fi details, `clawpi-portald` writes them into `/etc/clawpi/config.toml`, tears down the setup network, applies the `wpa_supplicant` config, and waits for the device to join the real network
 - `clawpi-init` only enters normal mode when that config is valid and complete
+- `clawpi-portald` marks setup complete only after the device has joined the submitted Wi-Fi network and then starts `clawpi.target`
 - the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` now starts `clawpi-sessiond`, which keeps a minimal runtime heartbeat under `/run/clawpi`
 - `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
@@ -176,13 +178,16 @@ The current shape is intentionally small:
 - `scripts/build_image.sh` assembles a custom ClawPi stage under `target/pi-gen/stage-clawpi`
 - that stage is built from the same install flow already proven on the current Pi
 - the stage copies ClawPi binaries and units into the image rootfs
+- the stage installs the runtime packages needed for headless setup onboarding
 - the stage seeds `/etc/clawpi/config.toml` in pending setup mode
+- the stage masks the distro `hostapd` and `dnsmasq` services so the setup network is owned by ClawPi
 - the stage enables `clawpi-mode.service` for first boot
 - the stage now uses a `prerun.sh` handoff so `pi-gen` copies the previous `stage2` rootfs into `stage-clawpi` before applying ClawPi files
 - when given a `pi-gen` checkout, the script syncs `stage-clawpi` into that tree and writes a matching `config`
 - `scripts/install_pi_gen_deps.sh` can prepare a Debian build host using either the checkout's `depends` file or the current upstream dependency set
 - on a CM5-class arm64 build host with a `16k` page-size kernel, the image build should use the `pi-gen` `arm64` branch rather than the default `master` checkout
-- the next proving-ground step is rerunning the real CM5 build to verify the image now continues past `stage-clawpi`
+- the proving-ground CM5 can now complete the first arm64 image build with this stage
+- the next proving-ground step is flashing that image to the CM5 eMMC and validating the cordless onboarding flow on real hardware
 
 This is not the full image pipeline yet.
 

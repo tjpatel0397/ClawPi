@@ -124,6 +124,10 @@ That custom stage now includes a `prerun.sh` handoff, so `pi-gen` copies the
 previous `stage2` rootfs into `stage-clawpi` before the ClawPi payload is
 applied.
 
+The stage also installs `hostapd` and `dnsmasq`, masks their distro-managed
+systemd units, and enables the ClawPi-owned onboarding service that opens a
+temporary setup network and local setup page on first boot.
+
 If the build host is missing `pi-gen` prerequisites, use
 `scripts/install_pi_gen_deps.sh --pi-gen-dir /path/to/pi-gen` on a Debian-based
 machine before running the build.
@@ -131,3 +135,7 @@ machine before running the build.
 On CM5-class arm64 hosts running a `16k` page-size kernel, a default `pi-gen`
 `master` checkout is the wrong target because it builds the `armhf` path. Use
 the `arm64` branch for those hosts before running `scripts/build_image.sh`.
+
+The proving-ground CM5 can now complete the arm64 image build with this stage.
+The next step is flashing that image onto the CM5 eMMC and validating the
+cordless first-boot onboarding path.

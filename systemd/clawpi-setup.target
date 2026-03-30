@@ -3,4 +3,4 @@ Description=ClawPi setup target
 AllowIsolate=yes
 StopWhenUnneeded=yes
 Wants=clawpi-setupd.service
-Wants=clawpi-wifid.service
+Wants=clawpi-portald.service

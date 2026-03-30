@@ -126,7 +126,7 @@ Current status:
 
 - the repo now includes a recovery service that redirects recovery mode back into setup mode
 - setup fallback behavior is starting to take shape on the proving-ground Pi
-- the repo now includes a minimal setup-mode Wi-Fi provisioning helper for the current Pi
+- the repo now includes a first OS-owned setup-network path for the current Pi
 
 This is the point where a fresh flash starts feeling much more usable.
 
@@ -154,7 +154,9 @@ Current status:
 - the repo now includes a small helper for installing `pi-gen` build dependencies on Debian
 - the build path now checks for the current CM5/DietPi `16k` page-size mismatch and points the user to the `pi-gen` `arm64` branch
 - the custom `stage-clawpi` stage now carries a proper `prerun.sh` rootfs handoff from `stage2`
-- the next proving-ground step is rerunning the real arm64 `pi-gen` build on the CM5
+- the image path now includes the runtime packages and service wiring for a temporary setup network plus phone-driven onboarding
+- the first real arm64 `pi-gen` build on the CM5 now completes and produces a flashable artifact
+- the next proving-ground step is flashing that image to CM5 eMMC and validating the headless onboarding flow
 - the full end-to-end flashable image flow still needs to be completed
 
 ## Phase 7 — ownership, pairing, and recovery

@@ -84,11 +84,13 @@ The repo now includes:
 - early systemd targets and services for boot-mode selection
 - a proving-ground install path for the current DietPi-based CM5
 - a minimal setup contract built around `/etc/clawpi/config.toml`
+- a first headless onboarding path that opens a temporary ClawPi setup network and local setup page in setup mode
 - a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
 - a recovery handoff that redirects the device back into setup mode
-- a minimal setup-mode Wi-Fi provisioning path for the current Pi
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout
 - a small `scripts/install_pi_gen_deps.sh` helper for preparing a Debian build host
-- a custom `stage-clawpi` stage handoff that now inherits the `stage2` rootfs before applying the ClawPi payload
+- a custom `stage-clawpi` stage that now inherits the `stage2` rootfs, installs the onboarding runtime packages, and applies the ClawPi payload
+- a first arm64 image build path that now completes on the CM5 proving ground
 
-ClawPi is not a flashable image yet.
+ClawPi can now produce a first flashable image, but the full OS experience is
+still early.
