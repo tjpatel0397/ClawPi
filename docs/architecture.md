@@ -178,6 +178,7 @@ The current shape is intentionally small:
 - the stage copies ClawPi binaries and units into the image rootfs
 - the stage seeds `/etc/clawpi/config.toml` in pending setup mode
 - the stage enables `clawpi-mode.service` for first boot
+- when given a `pi-gen` checkout, the script syncs `stage-clawpi` into that tree and writes a matching `config`
 
 This is not the full image pipeline yet.
 

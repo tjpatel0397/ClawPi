@@ -116,3 +116,6 @@ CM5 while the flashable image path is still taking shape.
 The repo now also includes an initial custom `pi-gen` stage template under
 `image/pi-gen/stage-clawpi`, and `scripts/build_image.sh` can assemble the
 current ClawPi payload into a stage bundle under `target/pi-gen/stage-clawpi`.
+
+If you pass `--pi-gen-dir`, the script will also sync `stage-clawpi` into that
+checkout and write a matching `config` file before running `build.sh`.

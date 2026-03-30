@@ -15,7 +15,7 @@ Assembles the current ClawPi pi-gen stage bundle and optionally runs pi-gen.
 
 Options:
   --out PATH         output directory for the assembled pi-gen stage bundle
-  --pi-gen-dir PATH  existing pi-gen checkout to run after assembling the stage
+  --pi-gen-dir PATH  existing pi-gen checkout to sync and run after assembling the stage
 EOF
 }
 
@@ -78,15 +78,28 @@ if [ -n "$PI_GEN_DIR" ]; then
         exit 1
     fi
 
-    echo "clawpi: running pi-gen with STAGE_LIST including:"
-    echo "  $STAGE_DIR"
+    PI_GEN_STAGE_DIR=$PI_GEN_DIR/stage-clawpi
+    rm -rf "$PI_GEN_STAGE_DIR"
+    cp -R "$STAGE_DIR" "$PI_GEN_STAGE_DIR"
+
+    cat >"$PI_GEN_DIR/config" <<EOF
+IMG_NAME='clawpi'
+RELEASE='trixie'
+ENABLE_SSH=1
+STAGE_LIST="stage0 stage1 stage2 stage-clawpi"
+EOF
+
+    echo "clawpi: synced custom stage into pi-gen:"
+    echo "  $PI_GEN_STAGE_DIR"
+    echo "clawpi: wrote pi-gen config:"
+    echo "  $PI_GEN_DIR/config"
+    echo "clawpi: running pi-gen with STAGE_LIST:"
+    echo "  stage0 stage1 stage2 stage-clawpi"
     (
         cd "$PI_GEN_DIR"
-        STAGE_LIST="stage0 stage1 stage2 $STAGE_DIR" \
-        IMG_NAME="${IMG_NAME:-clawpi}" \
         ./build.sh
     )
 else
     echo "clawpi: next step to build with pi-gen:"
-    echo "  STAGE_LIST=\"stage0 stage1 stage2 $STAGE_DIR\" /path/to/pi-gen/build.sh"
+    echo "  sh ./scripts/build_image.sh --pi-gen-dir /path/to/pi-gen"
 fi

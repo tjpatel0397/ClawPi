@@ -809,7 +809,10 @@ fn remove_if_exists(path: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn inspect_state_defaults_to_setup_when_config_is_missing() {
@@ -978,7 +981,11 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = env::temp_dir().join(format!("clawpi-core-test-{}-{nonce}", std::process::id()));
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let root = env::temp_dir().join(format!(
+            "clawpi-core-test-{}-{nonce}-{counter}",
+            std::process::id()
+        ));
         fs::create_dir_all(&root).unwrap();
         root
     }
