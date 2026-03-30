@@ -127,3 +127,10 @@ machine before running the build.
 On CM5-class arm64 hosts running a `16k` page-size kernel, a default `pi-gen`
 `master` checkout is the wrong target because it builds the `armhf` path. Use
 the `arm64` branch for those hosts before running `scripts/build_image.sh`.
+
+The first real arm64 `pi-gen` run on the proving-ground CM5 now reaches
+`stage-clawpi`.
+
+The current blocker is the custom stage handoff into the image rootfs:
+`image/pi-gen/stage-clawpi/01-clawpi/00-run.sh` is still trying to copy into a
+rootfs path that is not present at that point in the build.

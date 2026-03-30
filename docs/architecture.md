@@ -181,6 +181,8 @@ The current shape is intentionally small:
 - when given a `pi-gen` checkout, the script syncs `stage-clawpi` into that tree and writes a matching `config`
 - `scripts/install_pi_gen_deps.sh` can prepare a Debian build host using either the checkout's `depends` file or the current upstream dependency set
 - on a CM5-class arm64 build host with a `16k` page-size kernel, the image build should use the `pi-gen` `arm64` branch rather than the default `master` checkout
+- the first real arm64 `pi-gen` run on the proving-ground CM5 now gets through `stage0`, `stage1`, and `stage2` and reaches `stage-clawpi`
+- the current blocker is the custom stage rootfs handoff in `image/pi-gen/stage-clawpi/01-clawpi/00-run.sh`
 
 This is not the full image pipeline yet.
 
