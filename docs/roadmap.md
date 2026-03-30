@@ -1,0 +1,170 @@
+# ClawPi Roadmap
+
+## What this roadmap is for
+
+ClawPi has a big long-term goal.
+
+If we try to build the whole vision at once, the project will get messy very fast.
+
+This roadmap exists to keep the work in the right order.
+
+The idea is simple:
+
+build the foundations first, then build the real OS experience on top of them.
+
+## Phase 0 — lock the direction
+
+Goal:
+
+- define ClawPi as an Agentic OS project
+- keep the project OS-first
+- keep the project agent-first
+- keep the long-term vision clear
+
+Outputs:
+
+- README
+- architecture doc
+- roadmap
+- ADR
+- agent instructions
+
+## Phase 1 — shape the repo
+
+Goal:
+
+- create a repo structure that fits an OS project
+
+Outputs:
+
+- docs
+- Rust workspace
+- image folder
+- overlays folder
+- systemd folder
+- scripts folder
+
+This phase is about giving the project a home that matches what it is trying to become.
+
+## Phase 2 — prove the basic runtime on the current Pi
+
+Goal:
+
+- use the current CM5 device as a proving ground
+- test ClawPi logic on real hardware
+- prove early boot and runtime ideas before building the full image
+
+Outputs:
+
+- install path for the current device
+- early ClawPi tools or helpers
+- basic boot/runtime flow on real hardware
+
+Current status:
+
+- the repo includes an early install path for the current DietPi-based CM5
+- the repo includes minimal mode selection and setup target wiring for proving-ground tests
+
+This is not the final product.
+This is the stage where we prove the early direction on the hardware we already have.
+
+## Phase 3 — create the first setup flow
+
+Goal:
+
+- define what first boot should feel like
+
+Outputs:
+
+- first-boot detection
+- setup path
+- config-writing path
+- handoff into normal mode
+
+This is where ClawPi starts to feel like a system instead of just a codebase.
+
+## Phase 4 — connect the runtime layer
+
+Goal:
+
+- wire ClawPi into the agent/runtime layer in a clean way
+
+Outputs:
+
+- runtime wiring
+- browser/tool integration path
+- memory/task direction
+- example system behavior
+
+This phase should focus on integration, not on rebuilding everything from scratch.
+
+## Phase 5 — make setup resilient
+
+Goal:
+
+- make it practical to get a fresh system online
+
+Outputs:
+
+- Wi-Fi setup path
+- setup fallback behavior
+- clearer recovery into setup mode
+
+This is the point where a fresh flash starts feeling much more usable.
+
+## Phase 6 — build the first flashable image
+
+Goal:
+
+- turn the working system direction into a repeatable image build
+
+Outputs:
+
+- image build flow
+- ClawPi image layer
+- documented build process
+- flashable output
+- first boot into setup mode
+
+This is the moment where ClawPi starts becoming a real OS product.
+
+## Phase 7 — ownership, pairing, and recovery
+
+Goal:
+
+- make the system safer and easier to manage
+
+Outputs:
+
+- pairing direction
+- ownership flow
+- recovery behavior
+- reset path
+
+## Phase 8 — automation and repeatability
+
+Goal:
+
+- make builds and testing easier to repeat
+
+Outputs:
+
+- CI
+- image automation
+- artifact generation
+- better repeatability for development
+
+## Long-term direction
+
+Later phases may include things like:
+
+- better recovery tools
+- stronger update flows
+- richer browser and tool behavior
+- better memory and proactive behavior
+- device-to-device pairing helpers
+- more complete image and hardware support
+
+The important thing is not to build these too early.
+
+The important thing is to keep building in the right order.

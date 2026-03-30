@@ -1,0 +1,4 @@
+[Unit]
+Description=ClawPi setup target
+AllowIsolate=yes
+Wants=clawpi-setupd.service

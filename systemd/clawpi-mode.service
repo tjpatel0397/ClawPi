@@ -1,0 +1,12 @@
+[Unit]
+Description=ClawPi proving-ground mode selector
+ConditionPathExists=/usr/local/libexec/clawpi/clawpi-init
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/clawpi/clawpi-init activate
+
+[Install]
+WantedBy=multi-user.target

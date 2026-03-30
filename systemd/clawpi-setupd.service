@@ -1,0 +1,10 @@
+[Unit]
+Description=ClawPi proving-ground setup service
+ConditionPathExists=/usr/local/libexec/clawpi/clawpi-setupd
+PartOf=clawpi-setup.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/clawpi/clawpi-setupd --once
+RemainAfterExit=yes
