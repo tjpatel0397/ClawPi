@@ -87,5 +87,6 @@ The repo now includes:
 - a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
 - a recovery handoff that redirects the device back into setup mode
 - a minimal setup-mode Wi-Fi provisioning path for the current Pi
+- an initial custom `pi-gen` stage assembly path under `scripts/build_image.sh`
 
 ClawPi is not a flashable image yet.

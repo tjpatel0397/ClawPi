@@ -112,3 +112,7 @@ Work in progress.
 The current practical path is `scripts/install_dev_on_pi.sh`, which installs
 the early ClawPi binaries and systemd units onto the DietPi-based proving-ground
 CM5 while the flashable image path is still taking shape.
+
+The repo now also includes an initial custom `pi-gen` stage template under
+`image/pi-gen/stage-clawpi`, and `scripts/build_image.sh` can assemble the
+current ClawPi payload into a stage bundle under `target/pi-gen/stage-clawpi`.

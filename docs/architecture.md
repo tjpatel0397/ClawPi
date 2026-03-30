@@ -167,6 +167,22 @@ At the moment this looks like:
 
 This is a proving-ground path, not the final image design.
 
+## Initial image path
+
+ClawPi now has the beginning of a real `pi-gen` path.
+
+The current shape is intentionally small:
+
+- `scripts/build_image.sh` assembles a custom ClawPi stage under `target/pi-gen/stage-clawpi`
+- that stage is built from the same install flow already proven on the current Pi
+- the stage copies ClawPi binaries and units into the image rootfs
+- the stage seeds `/etc/clawpi/config.toml` in pending setup mode
+- the stage enables `clawpi-mode.service` for first boot
+
+This is not the full image pipeline yet.
+
+It is the first point where the repo can produce a real ClawPi-owned image layer instead of only modifying a live device.
+
 ## Device philosophy
 
 ClawPi should be designed with the assumption that the device may not have:

@@ -1,0 +1,15 @@
+# ClawPi Custom pi-gen Stage
+
+This directory is a ClawPi-owned custom stage for `pi-gen`.
+
+It is intentionally narrow:
+
+- install the current ClawPi binaries
+- install the current ClawPi systemd units
+- seed `/etc/clawpi/config.toml` into pending setup mode
+- enable `clawpi-mode.service` for first boot
+
+The generated payload for this stage is assembled by `scripts/build_image.sh`.
+
+That keeps the image path aligned with the proving-ground install path instead of
+creating a second installation story just for image builds.

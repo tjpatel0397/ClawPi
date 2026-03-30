@@ -1,0 +1,5 @@
+IMG_NAME='clawpi'
+RELEASE='trixie'
+ENABLE_SSH=1
+CLAWPI_STAGE_DIR='/absolute/path/to/ClawPi/target/pi-gen/stage-clawpi'
+STAGE_LIST="stage0 stage1 stage2 ${CLAWPI_STAGE_DIR}"

@@ -146,6 +146,12 @@ Outputs:
 
 This is the moment where ClawPi starts becoming a real OS product.
 
+Current status:
+
+- the repo now includes an initial custom `pi-gen` stage for ClawPi
+- `scripts/build_image.sh` can assemble that stage from the current proven install path
+- the full end-to-end flashable image flow still needs to be completed
+
 ## Phase 7 — ownership, pairing, and recovery
 
 Goal:
