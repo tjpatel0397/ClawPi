@@ -26,6 +26,7 @@ const AP_CAPPORT_API_URL: &str = "http://192.168.64.1/.well-known/captive-portal
 const AP_CHANNEL: &str = "6";
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 const RESTORE_TIMEOUT: Duration = Duration::from_secs(20);
+const IFUPDOWN_WLAN_UNIT: &str = "ifup@wlan0.service";
 
 fn main() -> ExitCode {
     let layout = Layout::detect();
@@ -252,6 +253,9 @@ impl PortalRuntime {
 
         let country = self.current_wifi_country()?;
         let _ = command_succeeds("rfkill", &["unblock", "wlan"]);
+        let _ = stop_unit_if_loaded(IFUPDOWN_WLAN_UNIT);
+        let _ = command_succeeds("ifdown", &["--force", AP_INTERFACE]);
+        let _ = command_succeeds("dhclient", &["-r", AP_INTERFACE]);
         stop_unit("wpa_supplicant@wlan0.service");
         stop_unit("wpa_supplicant.service");
 
@@ -291,8 +295,14 @@ impl PortalRuntime {
         let _ = command_succeeds("ip", &["addr", "flush", "dev", AP_INTERFACE]);
         let _ = run_command("ip", &["link", "set", AP_INTERFACE, "up"]);
 
-        for unit in ["wpa_supplicant@wlan0.service", "wpa_supplicant.service"] {
-            let _ = start_unit_if_loaded(unit);
+        let uses_ifupdown = unit_is_loaded(IFUPDOWN_WLAN_UNIT)?;
+
+        if uses_ifupdown {
+            let _ = start_unit_if_loaded(IFUPDOWN_WLAN_UNIT);
+        } else {
+            for unit in ["wpa_supplicant@wlan0.service", "wpa_supplicant.service"] {
+                let _ = start_unit_if_loaded(unit);
+            }
         }
 
         if let Err(err) = apply_wifi_config(&self.layout) {
@@ -300,26 +310,32 @@ impl PortalRuntime {
             return Err(err);
         }
 
-        let _ = command_succeeds("wpa_cli", &["-i", AP_INTERFACE, "reconnect"]);
+        if uses_ifupdown {
+            let _ = command_succeeds("ifup", &["--force", AP_INTERFACE]);
+        } else {
+            let _ = command_succeeds("wpa_cli", &["-i", AP_INTERFACE, "reconnect"]);
 
-        for unit in [
-            "dhcpcd.service",
-            "ifup@wlan0.service",
-            "systemd-networkd.service",
-            "NetworkManager.service",
-        ] {
-            let _ = start_unit_if_loaded(unit);
+            for unit in [
+                "dhcpcd.service",
+                "systemd-networkd.service",
+                "NetworkManager.service",
+            ] {
+                let _ = start_unit_if_loaded(unit);
+            }
         }
 
         if !has_ipv4_address(AP_INTERFACE)? {
-            for (program, args) in [
-                ("dhcpcd", vec!["-n", AP_INTERFACE]),
-                ("ifup", vec![AP_INTERFACE]),
-                ("dhclient", vec!["-1", AP_INTERFACE]),
-                ("udhcpc", vec!["-n", "-q", "-i", AP_INTERFACE]),
-            ] {
-                if command_succeeds(program, &args) {
-                    break;
+            if uses_ifupdown {
+                let _ = command_succeeds("ifup", &["--force", AP_INTERFACE]);
+            } else {
+                for (program, args) in [
+                    ("dhcpcd", vec!["-n", AP_INTERFACE]),
+                    ("dhclient", vec!["-1", AP_INTERFACE]),
+                    ("udhcpc", vec!["-n", "-q", "-i", AP_INTERFACE]),
+                ] {
+                    if command_succeeds(program, &args) {
+                        break;
+                    }
                 }
             }
         }
@@ -827,6 +843,15 @@ fn stop_unit(unit: &str) {
     let _ = Command::new("systemctl").args(["stop", unit]).status();
 }
 
+fn stop_unit_if_loaded(unit: &str) -> io::Result<bool> {
+    if !unit_is_loaded(unit)? {
+        return Ok(false);
+    }
+
+    stop_unit(unit);
+    Ok(true)
+}
+
 fn confirm_child_started(child: &mut Child, label: &str) -> io::Result<()> {
     thread::sleep(Duration::from_millis(500));
     if let Some(status) = child.try_wait()? {
@@ -949,6 +974,15 @@ fn start_unit(unit: &str) -> io::Result<()> {
 }
 
 fn start_unit_if_loaded(unit: &str) -> io::Result<bool> {
+    if !unit_is_loaded(unit)? {
+        return Ok(false);
+    }
+
+    start_unit(unit)?;
+    Ok(true)
+}
+
+fn unit_is_loaded(unit: &str) -> io::Result<bool> {
     let output = match Command::new("systemctl")
         .args(["show", "-p", "LoadState", "--value", unit])
         .output()
@@ -959,12 +993,7 @@ fn start_unit_if_loaded(unit: &str) -> io::Result<bool> {
         Err(err) => return Err(err),
     };
 
-    if String::from_utf8_lossy(&output.stdout).trim() == "not-found" {
-        return Ok(false);
-    }
-
-    start_unit(unit)?;
-    Ok(true)
+    Ok(String::from_utf8_lossy(&output.stdout).trim() != "not-found")
 }
 
 #[cfg(test)]

@@ -157,9 +157,11 @@ At the moment this looks like:
 
 - `clawpi-mode.service` runs during boot on the current Pi
 - `clawpi-init` chooses a target based on simple local state
+- on the current DietPi proving ground, Wi-Fi client mode is owned by `ifup@wlan0.service`
 - `clawpi-setup.target` starts `clawpi-setupd` and `clawpi-portald`
 - `clawpi-setupd` seeds or validates `/etc/clawpi/config.toml`
 - `clawpi-portald` opens a temporary setup network like `ClawPi Setup XXXX`, answers captive-portal probes, and serves a local setup page at `http://setup.clawpi/` with `http://192.168.64.1/` as the direct fallback
+- on that DietPi proving ground, `clawpi-portald` has to stop and restore `ifup@wlan0.service` when taking over `wlan0` for setup mode
 - when the user submits home Wi-Fi details, `clawpi-portald` writes them into `/etc/clawpi/config.toml`, tears down the setup network, applies the `wpa_supplicant` config, and waits for the device to join the real network
 - `clawpi-init` only enters normal mode when that config is valid and complete
 - `clawpi-portald` marks setup complete only after the device has joined the submitted Wi-Fi network and then starts `clawpi.target`
