@@ -97,6 +97,7 @@ fn print_status() -> ExitCode {
                 "portal_status_path={}",
                 layout.portal_status_path().display()
             );
+            println!("web_status_path={}", layout.web_status_path().display());
 
             if let Some(config) = state.config_status.as_config() {
                 println!("device_name={}", config.device_name);
@@ -222,6 +223,28 @@ fn print_status() -> ExitCode {
                 Ok(None) => println!("portal_status=absent"),
                 Err(err) => {
                     eprintln!("failed to read portal status: {err}");
+                    return ExitCode::from(1);
+                }
+            }
+
+            match read_optional_file(&layout.web_status_path()) {
+                Ok(Some(content)) => {
+                    println!(
+                        "web_status={}",
+                        lookup_field(&content, "status").unwrap_or("unknown")
+                    );
+                    println!(
+                        "web_hostname={}",
+                        lookup_field(&content, "hostname").unwrap_or("unknown")
+                    );
+                    println!(
+                        "web_url={}",
+                        lookup_field(&content, "local_url").unwrap_or("unknown")
+                    );
+                }
+                Ok(None) => println!("web_status=absent"),
+                Err(err) => {
+                    eprintln!("failed to read web status: {err}");
                     return ExitCode::from(1);
                 }
             }

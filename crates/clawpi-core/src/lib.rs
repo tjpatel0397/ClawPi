@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 pub const CONFIG_VERSION: u32 = 1;
 pub const RUNTIME_PROFILE: &str = "proving-ground";
 pub const DEFAULT_WIFI_COUNTRY: &str = "US";
+pub const DEFAULT_LOCAL_HOSTNAME: &str = "clawpi";
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Mode {
@@ -174,6 +175,10 @@ impl Layout {
         self.run_dir().join("portal.status")
     }
 
+    pub fn web_status_path(&self) -> PathBuf {
+        self.run_dir().join("web.status")
+    }
+
     pub fn wpa_supplicant_run_dir(&self) -> PathBuf {
         self.root.join("run").join("wpa_supplicant")
     }
@@ -267,9 +272,55 @@ pub fn set_device_name(layout: &Layout, device_name: &str) -> io::Result<ClawPiC
     let mut config = config_for_update(layout)?;
     config.device_name = trimmed.to_string();
     validate_config(&config).map_err(invalid_data)?;
+    sync_device_hostname(layout, &config.device_name)?;
     write_config(layout, &config)?;
 
     Ok(config)
+}
+
+pub fn device_hostname_label(device_name: &str) -> String {
+    let mut hostname = String::with_capacity(device_name.len());
+    let mut last_was_hyphen = false;
+
+    for ch in device_name.chars() {
+        let normalized = ch.to_ascii_lowercase();
+        if normalized.is_ascii_alphanumeric() {
+            hostname.push(normalized);
+            last_was_hyphen = false;
+        } else if !hostname.is_empty() && !last_was_hyphen {
+            hostname.push('-');
+            last_was_hyphen = true;
+        }
+    }
+
+    let trimmed = hostname.trim_matches('-');
+    let mut value = if trimmed.is_empty() {
+        String::from(DEFAULT_LOCAL_HOSTNAME)
+    } else {
+        trimmed.to_string()
+    };
+
+    if value.len() > 63 {
+        value.truncate(63);
+        while value.ends_with('-') {
+            value.pop();
+        }
+        if value.is_empty() {
+            value.push_str(DEFAULT_LOCAL_HOSTNAME);
+        }
+    }
+
+    value
+}
+
+pub fn local_url_for_device_name(device_name: &str) -> String {
+    format!("http://{}.local/", device_hostname_label(device_name))
+}
+
+pub fn sync_device_hostname(layout: &Layout, device_name: &str) -> io::Result<String> {
+    let hostname = device_hostname_label(device_name);
+    fs::write(layout.hostname_path(), format!("{hostname}\n"))?;
+    Ok(hostname)
 }
 
 pub fn set_wifi_credentials(
@@ -565,7 +616,7 @@ fn config_for_update(layout: &Layout) -> io::Result<ClawPiConfig> {
 fn default_config(layout: &Layout) -> io::Result<ClawPiConfig> {
     let device_name = read_optional_file(&layout.hostname_path())?
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| String::from("clawpi"));
+        .unwrap_or_else(|| String::from(DEFAULT_LOCAL_HOSTNAME));
     let setup_state = if layout.legacy_setup_complete_path().exists() {
         SetupState::Complete
     } else {
@@ -913,8 +964,22 @@ mod tests {
         assert_eq!(config.device_name, "clawpi-cm5");
         assert_eq!(config.setup_state, SetupState::Pending);
         assert_eq!(config.wifi_country, DEFAULT_WIFI_COUNTRY);
+        assert_eq!(
+            read_optional_file(&layout.hostname_path()).unwrap(),
+            Some(String::from("clawpi-cm5"))
+        );
 
         cleanup_test_root(&root);
+    }
+
+    #[test]
+    fn device_hostname_label_sanitizes_user_facing_name() {
+        assert_eq!(device_hostname_label("Kitchen ClawPi"), "kitchen-clawpi");
+        assert_eq!(device_hostname_label("  ###  "), DEFAULT_LOCAL_HOSTNAME);
+        assert_eq!(
+            local_url_for_device_name("Kitchen ClawPi"),
+            "http://kitchen-clawpi.local/"
+        );
     }
 
     #[test]

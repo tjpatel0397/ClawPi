@@ -50,6 +50,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clawpi-webd"
+version = "0.1.0"
+dependencies = [
+ "clawpi-core",
+]
+
+[[package]]
 name = "clawpi-wifid"
 version = "0.1.0"
 dependencies = [

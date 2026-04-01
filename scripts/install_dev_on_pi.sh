@@ -17,7 +17,7 @@ ensure_runtime_packages() {
     fi
 
     missing_packages=
-    for package in hostapd dnsmasq; do
+    for package in hostapd dnsmasq avahi-daemon; do
         if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
             missing_packages="${missing_packages} ${package}"
         fi
@@ -91,6 +91,7 @@ install -m 0755 target/release/clawpi-recoveryd "$LIBEXEC_DIR/clawpi-recoveryd"
 install -m 0755 target/release/clawpi-setupd "$LIBEXEC_DIR/clawpi-setupd"
 install -m 0755 target/release/clawpi-sessiond "$LIBEXEC_DIR/clawpi-sessiond"
 install -m 0755 target/release/clawpi-wifid "$LIBEXEC_DIR/clawpi-wifid"
+install -m 0755 target/release/clawpi-webd "$LIBEXEC_DIR/clawpi-webd"
 install -m 0755 target/release/clawpi-portald "$LIBEXEC_DIR/clawpi-portald"
 install -m 0755 target/release/clawpi-ctl "$BIN_DIR/clawpi-ctl"
 
@@ -103,6 +104,7 @@ install -m 0644 systemd/clawpi-portald.service "$SYSTEMD_DIR/clawpi-portald.serv
 install -m 0644 systemd/clawpi-setupd.service "$SYSTEMD_DIR/clawpi-setupd.service"
 install -m 0644 systemd/clawpi-sessiond.service "$SYSTEMD_DIR/clawpi-sessiond.service"
 install -m 0644 systemd/clawpi-wifid.service "$SYSTEMD_DIR/clawpi-wifid.service"
+install -m 0644 systemd/clawpi-webd.service "$SYSTEMD_DIR/clawpi-webd.service"
 
 ln -snf /dev/null "$SYSTEMD_DIR/hostapd.service"
 ln -snf /dev/null "$SYSTEMD_DIR/dnsmasq.service"
@@ -117,6 +119,7 @@ if [ "$ENABLE_UNITS" -eq 1 ]; then
     if [ "$ROOT_DIR" = "/" ] && command -v systemctl >/dev/null 2>&1; then
         systemctl daemon-reload
         systemctl enable clawpi-mode.service
+        systemctl enable avahi-daemon.service
     else
         WANTS_DIR=$SYSTEMD_DIR/multi-user.target.wants
         install -d "$WANTS_DIR"
@@ -131,6 +134,7 @@ echo "  $LIBEXEC_DIR/clawpi-recoveryd"
 echo "  $LIBEXEC_DIR/clawpi-setupd"
 echo "  $LIBEXEC_DIR/clawpi-sessiond"
 echo "  $LIBEXEC_DIR/clawpi-wifid"
+echo "  $LIBEXEC_DIR/clawpi-webd"
 echo "  $LIBEXEC_DIR/clawpi-portald"
 echo "  $BIN_DIR/clawpi-ctl"
 echo "clawpi: systemd units:"
@@ -140,6 +144,7 @@ echo "  $SYSTEMD_DIR/clawpi-recoveryd.service"
 echo "  $SYSTEMD_DIR/clawpi-sessiond.service"
 echo "  $SYSTEMD_DIR/clawpi-setupd.service"
 echo "  $SYSTEMD_DIR/clawpi-wifid.service"
+echo "  $SYSTEMD_DIR/clawpi-webd.service"
 echo "  $SYSTEMD_DIR/clawpi.target"
 echo "  $SYSTEMD_DIR/clawpi-setup.target"
 echo "  $SYSTEMD_DIR/clawpi-recovery.target"

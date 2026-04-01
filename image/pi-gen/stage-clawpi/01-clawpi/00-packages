@@ -1,2 +1,3 @@
 hostapd
 dnsmasq
+avahi-daemon

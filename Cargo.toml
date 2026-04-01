@@ -7,6 +7,7 @@ members = [
     "crates/clawpi-ctl",
     "crates/clawpi-sessiond",
     "crates/clawpi-setupd",
+    "crates/clawpi-webd",
     "crates/clawpi-wifid",
 ]
 resolver = "2"

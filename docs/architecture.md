@@ -163,11 +163,12 @@ At the moment this looks like:
 - `clawpi-setupd` seeds or validates `/etc/clawpi/config.toml`
 - `clawpi-portald` opens a temporary setup network like `ClawPi Setup XXXX`, answers captive-portal probes, and serves a local setup page at `http://setup.clawpi/` with `http://192.168.64.1/` as the direct fallback
 - on that DietPi proving ground, `clawpi-portald` has to stop and restore `ifup@wlan0.service` when taking over `wlan0` for setup mode
-- when the user submits home Wi-Fi details, `clawpi-portald` writes them into `/etc/clawpi/config.toml`, tears down the setup network, applies the `wpa_supplicant` config, and waits for the device to join the real network
+- when the user submits home Wi-Fi details, `clawpi-portald` writes them into `/etc/clawpi/config.toml`, syncs the local hostname, tears down the setup network, applies the `wpa_supplicant` config, and waits for the device to join the real network
 - `clawpi-init` only enters normal mode when that config is valid and complete
 - `clawpi-portald` marks setup complete only after the device has joined the submitted Wi-Fi network and then starts `clawpi.target`
 - the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` now starts `clawpi-sessiond`, which keeps a minimal runtime heartbeat under `/run/clawpi`
+- `clawpi.target` also starts `clawpi-webd`, which serves a small local landing page so the post-setup handoff can continue at `http://<device-name>.local/`
 - `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
 
 This is a proving-ground path, not the final image design.

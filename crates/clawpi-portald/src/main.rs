@@ -1,6 +1,7 @@
 use clawpi_core::{
-    apply_wifi_config, inspect_state, mark_setup_complete, read_optional_file, record_mode,
-    set_device_name, set_wifi_credentials, ConfigStatus, Layout, Mode, DEFAULT_WIFI_COUNTRY,
+    apply_wifi_config, device_hostname_label, inspect_state, local_url_for_device_name,
+    mark_setup_complete, read_optional_file, record_mode, set_device_name, set_wifi_credentials,
+    ConfigStatus, Layout, Mode, DEFAULT_WIFI_COUNTRY,
 };
 use signal_hook::consts::signal::{SIGINT, SIGTERM};
 use signal_hook::flag as signal_flag;
@@ -171,7 +172,7 @@ impl PortalRuntime {
                     &mut stream,
                     "200 OK",
                     "text/html; charset=utf-8",
-                    self.render_transition_page(),
+                    self.render_transition_page()?,
                 )?;
                 stream.flush()?;
                 thread::sleep(Duration::from_millis(750));
@@ -213,6 +214,7 @@ impl PortalRuntime {
             .filter(|value| !value.is_empty());
 
         set_wifi_credentials(&self.layout, ssid, passphrase, country)?;
+        let _ = self.apply_runtime_hostname();
         self.last_error = None;
 
         Ok(())
@@ -407,6 +409,24 @@ impl PortalRuntime {
         })
     }
 
+    fn current_local_hostname(&self) -> io::Result<String> {
+        let state = inspect_state(&self.layout)?;
+        Ok(match state.config_status {
+            ConfigStatus::Valid(config) => device_hostname_label(&config.device_name),
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => String::from("clawpi"),
+        })
+    }
+
+    fn current_local_url(&self) -> io::Result<String> {
+        let state = inspect_state(&self.layout)?;
+        Ok(match state.config_status {
+            ConfigStatus::Valid(config) => local_url_for_device_name(&config.device_name),
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => {
+                String::from("http://clawpi.local/")
+            }
+        })
+    }
+
     fn write_setup_network_status(&self, country: &str) -> io::Result<()> {
         let mut content = format!(
             "phase=6\nstatus=setup-network-active\nmode=setup\nsetup_ssid={}\nportal_url={}\nportal_fallback_url={}\nap_address={}\nwifi_country={}\n",
@@ -455,11 +475,13 @@ impl PortalRuntime {
     }
 
     fn write_connected_status(&self, home_wifi_ssid: &str) -> io::Result<()> {
+        let local_url = self.current_local_url()?;
         write_status_file(
             &self.layout,
             &format!(
-                "phase=6\nstatus=connected\nmode=normal\nhome_wifi_ssid={}\ntarget={}\n",
+                "phase=6\nstatus=connected\nmode=normal\nhome_wifi_ssid={}\nhome_url={}\ntarget={}\n",
                 home_wifi_ssid,
+                local_url,
                 Mode::Normal.target_name()
             ),
         )
@@ -554,8 +576,9 @@ impl PortalRuntime {
         ))
     }
 
-    fn render_transition_page(&self) -> String {
-        format!(
+    fn render_transition_page(&self) -> io::Result<String> {
+        let local_url = self.current_local_url()?;
+        Ok(format!(
             "<!doctype html>\
 <html lang=\"en\">\
 <head>\
@@ -567,18 +590,42 @@ impl PortalRuntime {
     main {{ max-width: 32rem; margin: 0 auto; padding: 3rem 1.25rem; }}\
     h1 {{ font-size: 2rem; margin-bottom: 0.5rem; }}\
     p {{ line-height: 1.6; }}\
+    .meta {{ margin-top: 1rem; padding: 0.9rem 1rem; border-radius: 0.8rem; background: rgba(255,255,255,0.08); }}\
+    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}\
   </style>\
 </head>\
 <body>\
   <main>\
     <h1>ClawPi is switching networks</h1>\
     <p>This setup network will disappear while ClawPi joins your home Wi-Fi.</p>\
+    <div class=\"meta\">\
+      <strong>Next browser step</strong><br>\
+      Keep this page open. Once ClawPi is online, it will try to reopen at <code>{local_url}</code>.\
+    </div>\
     <p>If the <strong>{setup_ssid}</strong> network comes back after a short pause, rejoin it and check the password you entered.</p>\
+    <script>\
+      const targetUrl = {target_url};\
+      const healthUrl = targetUrl + 'health';\
+      async function waitForClawPi() {{\
+        for (;;) {{\
+          try {{\
+            await fetch(healthUrl, {{ cache: 'no-store', mode: 'no-cors' }});\
+            window.location.replace(targetUrl);\
+            return;\
+          }} catch (_) {{\
+            await new Promise((resolve) => setTimeout(resolve, 2000));\
+          }}\
+        }}\
+      }}\
+      window.setTimeout(waitForClawPi, 3000);\
+            </script>\
   </main>\
 </body>\
 </html>",
             setup_ssid = escape_html(&self.setup_ssid),
-        )
+            local_url = escape_html(&local_url),
+            target_url = js_string_literal(&local_url),
+        ))
     }
 
     fn hostapd_config_path(&self) -> PathBuf {
@@ -591,6 +638,19 @@ impl PortalRuntime {
 
     fn dnsmasq_leases_path(&self) -> PathBuf {
         self.portal_dir.join("dnsmasq.leases")
+    }
+
+    fn apply_runtime_hostname(&self) -> io::Result<()> {
+        let hostname = self.current_local_hostname()?;
+
+        if command_succeeds("hostnamectl", &["set-hostname", &hostname]) {
+            let _ = start_unit_if_loaded("avahi-daemon.service");
+            return Ok(());
+        }
+
+        let _ = command_succeeds("hostname", &[&hostname]);
+        let _ = start_unit_if_loaded("avahi-daemon.service");
+        Ok(())
     }
 
     fn write_hostapd_config(&self) -> io::Result<()> {
@@ -815,6 +875,15 @@ fn escape_html(value: &str) -> String {
     }
 
     escaped
+}
+
+fn js_string_literal(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+    format!("\"{escaped}\"")
 }
 
 fn build_setup_ssid() -> String {

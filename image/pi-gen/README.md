@@ -130,6 +130,10 @@ temporary setup network and local setup page on first boot, including
 captive-portal hints and a direct `http://192.168.64.1/` fallback when local
 DNS does not resolve `setup.clawpi`.
 
+The same image payload now also installs `avahi-daemon` and a small
+`clawpi-webd` landing service so a successful phone setup can hand off to
+`http://<device-name>.local/` instead of requiring SSH.
+
 If the build host is missing `pi-gen` prerequisites, use
 `scripts/install_pi_gen_deps.sh --pi-gen-dir /path/to/pi-gen` on a Debian-based
 machine before running the build.
