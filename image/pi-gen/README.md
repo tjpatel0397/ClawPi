@@ -133,7 +133,7 @@ DNS does not resolve `setup.clawpi`.
 The same image payload now also installs `avahi-daemon` and a small
 `clawpi-webd` local gateway service so a successful phone setup can hand off to
 `http://<device-name>.local/`, store the AI provider/model/API key on-device,
-and continue into a simple browser-based Claw control surface instead of
+and continue into a setup-first local Claw console instead of
 requiring SSH.
 
 If the build host is missing `pi-gen` prerequisites, use

@@ -87,8 +87,8 @@ The repo now includes:
 - a first headless onboarding path that opens a temporary ClawPi setup network and local setup page in setup mode, with captive-portal hints and a direct `http://192.168.64.1/` fallback
 - a first normal-mode local Claw gateway at `http://<device-name>.local/` so the phone handoff can continue without requiring SSH
 - local AI setup fields in the ClawPi config contract so the device can be given its provider, model, and API key after Wi-Fi onboarding
-- a small browser-based management UI that can both store AI credentials and send a simple prompt through the configured model
-- a proving-ground `clawpi.local` flow that is now functional end-to-end, but still visually dense and intentionally temporary
+- a small browser-based local console that starts with AI setup and then turns into a focused prompt surface for talking to the device
+- a proving-ground `clawpi.local` flow that is now functional end-to-end as a setup-first handoff instead of a dense management page
 - an API-key-based OpenAI path for waking Claw after Wi-Fi setup, with a future account-based GPT sign-in flow still to be designed
 - a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
 - a recovery handoff that redirects the device back into setup mode
@@ -100,8 +100,9 @@ The repo now includes:
 ClawPi can now produce a first flashable image, but the full OS experience is
 still early.
 
-The next local UX step is to simplify `clawpi.local` so the page feels like a
-single-purpose device setup and control surface instead of a debug-heavy
-management page. The next auth step is to keep the raw API key path while also
-exploring an account-based GPT sign-in flow similar to the ZeroClaw/OpenClaw
-direction.
+The local browser step is now shaped like a simple device console: configure
+the AI runtime, then talk to Claw through a narrow prompt surface on
+`clawpi.local`. The next runtime step is wiring that surface into deeper
+on-device action-taking and OS command execution, while the next auth step is
+to keep the raw API key path and also explore an account-based GPT sign-in flow
+similar to the ZeroClaw/OpenClaw direction.

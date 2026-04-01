@@ -158,8 +158,8 @@ Current status:
 - the setup network now includes captive-portal hints and a direct local-IP fallback for phone onboarding
 - normal mode now includes a local browser handoff so the setup phone can continue at `http://<device-name>.local/`
 - the local browser handoff now includes the next OS-owned setup step: storing AI provider, model, and API key from the device itself
-- `clawpi.local` now exposes the first minimal Claw gateway so a configured device can answer a simple prompt without SSH
-- the current `clawpi.local` UI is functional but too busy, and should be simplified before it becomes part of the flashable first-run story
+- `clawpi.local` now exposes a setup-first Claw console: configure the AI runtime, then ask a simple prompt without SSH
+- the next step for that console is wiring it into deeper on-device action-taking instead of adding dashboard complexity back into the page
 - the current AI setup path is API-key based and OpenAI-only
 - the next auth step is exploring a second path similar to ZeroClaw/OpenClaw where a GPT-style account flow can be used instead of only raw API keys
 - the first real arm64 `pi-gen` build on the CM5 now completes and produces a flashable artifact
