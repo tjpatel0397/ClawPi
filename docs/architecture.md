@@ -172,6 +172,9 @@ At the moment this looks like:
 - `clawpi.target` also starts `clawpi-webd`, which serves the local browser control surface at `http://<device-name>.local/`
 - if the AI fields are missing, `clawpi-webd` becomes a first-run management UI that asks for the local Claw provider, model, and API key
 - once those AI fields are present, `clawpi-webd` turns into a minimal local Claw gateway that can send a prompt through the configured model
+- today that local gateway is still intentionally narrow: it is more of an OS-owned proving-ground surface than a polished end-user UI
+- the current AI auth path is API-key based and OpenAI-only; the next auth design step is supporting a second path similar to ZeroClaw/OpenClaw where a GPT-style account flow can be used instead of only raw API keys
+- the next UX step is reducing how much system/debug detail is exposed on `clawpi.local` so the page feels like a simple device setup and control surface
 - `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
 
 This is a proving-ground path, not the final image design.
