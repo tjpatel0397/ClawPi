@@ -307,6 +307,7 @@ impl PortalRuntime {
         let _ = self.stop_setup_network();
         let _ = command_succeeds("ip", &["addr", "flush", "dev", AP_INTERFACE]);
         let _ = run_command("ip", &["link", "set", AP_INTERFACE, "up"]);
+        self.remove_stale_wpa_state()?;
 
         let uses_ifupdown = unit_is_loaded(IFUPDOWN_WLAN_UNIT)?;
 
@@ -321,7 +322,7 @@ impl PortalRuntime {
         apply_wifi_config(&self.layout)?;
 
         if uses_ifupdown {
-            let _ = command_succeeds("ifup", &["--force", AP_INTERFACE]);
+            // Avoid racing the systemd-managed ifup invocation on DietPi.
         } else {
             let _ = command_succeeds("wpa_cli", &["-i", AP_INTERFACE, "reconnect"]);
 
@@ -350,6 +351,18 @@ impl PortalRuntime {
             }
         }
 
+        Ok(())
+    }
+
+    fn remove_stale_wpa_state(&self) -> io::Result<()> {
+        remove_file_if_exists(&self.layout.wpa_supplicant_control_path())?;
+        remove_file_if_exists(
+            self.layout
+                .root()
+                .join("run")
+                .join("wpa_supplicant.wlan0.pid")
+                .as_path(),
+        )?;
         Ok(())
     }
 
@@ -871,6 +884,14 @@ fn confirm_child_started(child: &mut Child, label: &str) -> io::Result<()> {
 fn stop_child(child: &mut Child) {
     let _ = child.kill();
     let _ = child.wait();
+}
+
+fn remove_file_if_exists(path: &std::path::Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 fn has_ipv4_address(interface: &str) -> io::Result<bool> {

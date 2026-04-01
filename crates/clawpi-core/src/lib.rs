@@ -756,6 +756,13 @@ struct WifiReloadOutcome {
 }
 
 fn try_reload_wifi(layout: &Layout) -> io::Result<WifiReloadOutcome> {
+    if ifupdown_wlan_unit_loaded()? {
+        return Ok(WifiReloadOutcome {
+            status: "staged",
+            command: String::from("ifup@wlan0.service-managed"),
+        });
+    }
+
     if layout.wpa_supplicant_control_path().exists() {
         for args in [
             ["-i", "wlan0", "reconfigure"],
@@ -788,6 +795,20 @@ fn try_reload_wifi(layout: &Layout) -> io::Result<WifiReloadOutcome> {
         status: "staged",
         command: String::from("manual-reload-needed"),
     })
+}
+
+fn ifupdown_wlan_unit_loaded() -> io::Result<bool> {
+    let output = match std::process::Command::new("systemctl")
+        .args(["show", "-p", "LoadState", "--value", "ifup@wlan0.service"])
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        Ok(_) => return Ok(false),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err),
+    };
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim() != "not-found")
 }
 
 fn command_succeeds(program: &str, args: &[&str]) -> io::Result<bool> {
