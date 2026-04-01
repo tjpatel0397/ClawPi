@@ -190,6 +190,10 @@ impl Layout {
         self.wpa_supplicant_dir().join("wpa_supplicant-wlan0.conf")
     }
 
+    pub fn legacy_wpa_supplicant_config_path(&self) -> PathBuf {
+        self.wpa_supplicant_dir().join("wpa_supplicant.conf")
+    }
+
     pub fn legacy_setup_complete_path(&self) -> PathBuf {
         self.state_dir().join("setup-complete")
     }
@@ -425,15 +429,17 @@ pub fn apply_wifi_config(layout: &Layout) -> io::Result<()> {
                 format_string(ssid),
                 format_string(passphrase),
             );
-            fs::write(layout.wpa_supplicant_config_path(), file_content)?;
+            fs::write(layout.wpa_supplicant_config_path(), &file_content)?;
+            fs::write(layout.legacy_wpa_supplicant_config_path(), &file_content)?;
 
             let reload = try_reload_wifi(layout)?;
             format!(
-                "phase=5\nstatus={}\nwifi_ssid={}\nwifi_country={}\nwpa_supplicant_path={}\nreload={}\n",
+                "phase=5\nstatus={}\nwifi_ssid={}\nwifi_country={}\nwpa_supplicant_path={}\nwpa_supplicant_compat_path={}\nreload={}\n",
                 reload.status,
                 ssid,
                 config.wifi_country,
                 layout.wpa_supplicant_config_path().display(),
+                layout.legacy_wpa_supplicant_config_path().display(),
                 reload.command,
             )
         }

@@ -220,9 +220,7 @@ impl PortalRuntime {
 
     fn transition_to_home_wifi(&mut self, expected_ssid: &str) -> io::Result<()> {
         self.write_transition_status(expected_ssid)?;
-        self.stop_setup_network()?;
-        run_command("ip", &["link", "set", AP_INTERFACE, "up"])?;
-        apply_wifi_config(&self.layout)?;
+        self.activate_managed_wifi()?;
 
         if !wait_for_wifi_connection(expected_ssid)? {
             self.write_failed_status(&format!(
@@ -291,6 +289,21 @@ impl PortalRuntime {
     }
 
     fn restore_managed_wifi(&mut self) -> io::Result<()> {
+        if let Err(err) = self.activate_managed_wifi() {
+            self.last_error = Some(format!("portal rollback failed: {err}"));
+            return Err(err);
+        }
+
+        if wait_for_ipv4_address(AP_INTERFACE, RESTORE_TIMEOUT)? {
+            self.write_restored_status()?;
+        } else {
+            self.write_restore_failed_status("timed out waiting for wlan0 IPv4 after portal stop")?;
+        }
+
+        Ok(())
+    }
+
+    fn activate_managed_wifi(&mut self) -> io::Result<()> {
         let _ = self.stop_setup_network();
         let _ = command_succeeds("ip", &["addr", "flush", "dev", AP_INTERFACE]);
         let _ = run_command("ip", &["link", "set", AP_INTERFACE, "up"]);
@@ -305,10 +318,7 @@ impl PortalRuntime {
             }
         }
 
-        if let Err(err) = apply_wifi_config(&self.layout) {
-            self.last_error = Some(format!("portal rollback failed: {err}"));
-            return Err(err);
-        }
+        apply_wifi_config(&self.layout)?;
 
         if uses_ifupdown {
             let _ = command_succeeds("ifup", &["--force", AP_INTERFACE]);
@@ -338,12 +348,6 @@ impl PortalRuntime {
                     }
                 }
             }
-        }
-
-        if wait_for_ipv4_address(AP_INTERFACE, RESTORE_TIMEOUT)? {
-            self.write_restored_status()?;
-        } else {
-            self.write_restore_failed_status("timed out waiting for wlan0 IPv4 after portal stop")?;
         }
 
         Ok(())
