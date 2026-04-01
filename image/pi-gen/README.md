@@ -131,8 +131,10 @@ captive-portal hints and a direct `http://192.168.64.1/` fallback when local
 DNS does not resolve `setup.clawpi`.
 
 The same image payload now also installs `avahi-daemon` and a small
-`clawpi-webd` landing service so a successful phone setup can hand off to
-`http://<device-name>.local/` instead of requiring SSH.
+`clawpi-webd` local gateway service so a successful phone setup can hand off to
+`http://<device-name>.local/`, store the AI provider/model/API key on-device,
+and continue into a simple browser-based Claw control surface instead of
+requiring SSH.
 
 If the build host is missing `pi-gen` prerequisites, use
 `scripts/install_pi_gen_deps.sh --pi-gen-dir /path/to/pi-gen` on a Debian-based

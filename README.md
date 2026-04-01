@@ -85,7 +85,9 @@ The repo now includes:
 - a proving-ground install path for the current DietPi-based CM5
 - a minimal setup contract built around `/etc/clawpi/config.toml`
 - a first headless onboarding path that opens a temporary ClawPi setup network and local setup page in setup mode, with captive-portal hints and a direct `http://192.168.64.1/` fallback
-- a first normal-mode local web landing path so the phone handoff can continue at `http://<device-name>.local/` instead of requiring SSH
+- a first normal-mode local Claw gateway at `http://<device-name>.local/` so the phone handoff can continue without requiring SSH
+- local AI setup fields in the ClawPi config contract so the device can be given its provider, model, and API key after Wi-Fi onboarding
+- a small browser-based management UI that can both store AI credentials and send a simple prompt through the configured model
 - a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
 - a recovery handoff that redirects the device back into setup mode
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout

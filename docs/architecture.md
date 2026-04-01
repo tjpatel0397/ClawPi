@@ -168,7 +168,10 @@ At the moment this looks like:
 - `clawpi-portald` marks setup complete only after the device has joined the submitted Wi-Fi network and then starts `clawpi.target`
 - the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` now starts `clawpi-sessiond`, which keeps a minimal runtime heartbeat under `/run/clawpi`
-- `clawpi.target` also starts `clawpi-webd`, which serves a small local landing page so the post-setup handoff can continue at `http://<device-name>.local/`
+- the same `/etc/clawpi/config.toml` contract now also carries the first AI runtime fields: provider, model, and API key
+- `clawpi.target` also starts `clawpi-webd`, which serves the local browser control surface at `http://<device-name>.local/`
+- if the AI fields are missing, `clawpi-webd` becomes a first-run management UI that asks for the local Claw provider, model, and API key
+- once those AI fields are present, `clawpi-webd` turns into a minimal local Claw gateway that can send a prompt through the configured model
 - `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
 
 This is a proving-ground path, not the final image design.

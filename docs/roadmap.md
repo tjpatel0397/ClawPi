@@ -156,7 +156,9 @@ Current status:
 - the custom `stage-clawpi` stage now carries a proper `prerun.sh` rootfs handoff from `stage2`
 - the image path now includes the runtime packages and service wiring for a temporary setup network plus phone-driven onboarding
 - the setup network now includes captive-portal hints and a direct local-IP fallback for phone onboarding
-- normal mode now includes the beginning of a local browser handoff so the setup phone can continue at `http://<device-name>.local/`
+- normal mode now includes a local browser handoff so the setup phone can continue at `http://<device-name>.local/`
+- the local browser handoff now includes the next OS-owned setup step: storing AI provider, model, and API key from the device itself
+- `clawpi.local` now exposes the first minimal Claw gateway so a configured device can answer a simple prompt without SSH
 - the first real arm64 `pi-gen` build on the CM5 now completes and produces a flashable artifact
 - the next proving-ground step is flashing that image to CM5 eMMC and validating the headless onboarding flow
 - the full end-to-end flashable image flow still needs to be completed

@@ -1,6 +1,7 @@
 use clawpi_core::{
-    clear_wifi_credentials, detect_mode, inspect_state, mark_setup_complete, read_optional_file,
-    set_device_name, set_recovery_requested, set_wifi_credentials, Layout,
+    ai_configured, clear_ai_profile, clear_wifi_credentials, detect_mode, inspect_state,
+    mark_setup_complete, read_optional_file, set_ai_profile, set_device_name,
+    set_recovery_requested, set_wifi_credentials, Layout,
 };
 use std::env;
 use std::process::ExitCode;
@@ -44,6 +45,25 @@ fn main() -> ExitCode {
             update_wifi(&ssid, &passphrase, country.as_deref())
         }
         Some("clear-wifi") => clear_wifi(),
+        Some("set-ai") => {
+            let provider = match args.next() {
+                Some(value) => value,
+                None => {
+                    eprintln!("set-ai requires PROVIDER and API_KEY");
+                    return ExitCode::from(2);
+                }
+            };
+            let api_key = match args.next() {
+                Some(value) => value,
+                None => {
+                    eprintln!("set-ai requires PROVIDER and API_KEY");
+                    return ExitCode::from(2);
+                }
+            };
+            let model = args.next();
+            update_ai(&provider, &api_key, model.as_deref())
+        }
+        Some("clear-ai") => clear_ai(),
         Some("complete-setup") => toggle_setup_complete(true),
         Some("require-setup") => toggle_setup_complete(false),
         Some("request-recovery") => toggle_recovery(true),
@@ -65,6 +85,8 @@ fn print_usage() {
     println!("  set-device-name NAME      update the device name in /etc/clawpi/config.toml");
     println!("  set-wifi SSID PASS [CC]   store setup-mode Wi-Fi credentials");
     println!("  clear-wifi                remove stored Wi-Fi credentials");
+    println!("  set-ai PROVIDER KEY [MODEL] store AI provider, API key, and model");
+    println!("  clear-ai                  remove stored AI configuration");
     println!("  complete-setup            mark the setup contract as complete");
     println!("  require-setup             mark the setup contract as pending");
     println!("  request-recovery          force recovery mode on the next activation");
@@ -109,11 +131,19 @@ fn print_status() -> ExitCode {
                 println!("runtime_profile={}", config.runtime_profile);
                 println!("wifi_country={}", config.wifi_country);
                 println!("wifi_configured={}", config.wifi_ssid.is_some());
+                println!("ai_configured={}", ai_configured(config));
                 if let Some(ssid) = &config.wifi_ssid {
                     println!("wifi_ssid={ssid}");
                 }
+                if let Some(provider) = &config.ai_provider {
+                    println!("ai_provider={provider}");
+                }
+                if let Some(model) = &config.ai_model {
+                    println!("ai_model={model}");
+                }
             } else {
                 println!("setup_complete=false");
+                println!("ai_configured=false");
             }
 
             if let Some(reason) = state.config_status.error() {
@@ -304,6 +334,38 @@ fn clear_wifi() -> ExitCode {
         }
         Err(err) => {
             eprintln!("failed to clear wifi config: {err}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn update_ai(provider: &str, api_key: &str, model: Option<&str>) -> ExitCode {
+    let layout = Layout::detect();
+
+    match set_ai_profile(&layout, provider, model, api_key) {
+        Ok(config) => {
+            println!("ai_provider={}", config.ai_provider.unwrap_or_default());
+            println!("ai_model={}", config.ai_model.unwrap_or_default());
+            println!("ai_configured=true");
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("failed to update AI config: {err}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn clear_ai() -> ExitCode {
+    let layout = Layout::detect();
+
+    match clear_ai_profile(&layout) {
+        Ok(_) => {
+            println!("ai_configured=false");
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("failed to clear AI config: {err}");
             ExitCode::from(1)
         }
     }

@@ -8,6 +8,8 @@ pub const CONFIG_VERSION: u32 = 1;
 pub const RUNTIME_PROFILE: &str = "proving-ground";
 pub const DEFAULT_WIFI_COUNTRY: &str = "US";
 pub const DEFAULT_LOCAL_HOSTNAME: &str = "clawpi";
+pub const DEFAULT_AI_PROVIDER: &str = "openai";
+pub const DEFAULT_AI_MODEL: &str = "gpt-5.4";
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Mode {
@@ -78,6 +80,9 @@ pub struct ClawPiConfig {
     pub wifi_country: String,
     pub wifi_ssid: Option<String>,
     pub wifi_passphrase: Option<String>,
+    pub ai_provider: Option<String>,
+    pub ai_model: Option<String>,
+    pub ai_api_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -359,6 +364,55 @@ pub fn set_wifi_credentials(
     Ok(config)
 }
 
+pub fn set_ai_profile(
+    layout: &Layout,
+    provider: &str,
+    model: Option<&str>,
+    api_key: &str,
+) -> io::Result<ClawPiConfig> {
+    layout.ensure_dirs()?;
+
+    let normalized_provider = normalize_ai_provider(provider)
+        .map_err(|reason| io::Error::new(io::ErrorKind::InvalidInput, reason))?;
+    let normalized_model = normalize_ai_model(model.unwrap_or(DEFAULT_AI_MODEL))
+        .map_err(|reason| io::Error::new(io::ErrorKind::InvalidInput, reason))?;
+    let normalized_api_key = normalize_ai_api_key(api_key)
+        .map_err(|reason| io::Error::new(io::ErrorKind::InvalidInput, reason))?;
+
+    let mut config = config_for_update(layout)?;
+    config.ai_provider = Some(normalized_provider);
+    config.ai_model = Some(normalized_model);
+    config.ai_api_key = Some(normalized_api_key);
+    validate_config(&config).map_err(invalid_data)?;
+    write_config(layout, &config)?;
+
+    Ok(config)
+}
+
+pub fn clear_ai_profile(layout: &Layout) -> io::Result<ClawPiConfig> {
+    layout.ensure_dirs()?;
+
+    let mut config = config_for_update(layout)?;
+    config.ai_provider = None;
+    config.ai_model = None;
+    config.ai_api_key = None;
+    validate_config(&config).map_err(invalid_data)?;
+    write_config(layout, &config)?;
+
+    Ok(config)
+}
+
+pub fn ai_configured(config: &ClawPiConfig) -> bool {
+    matches!(
+        (
+            config.ai_provider.as_deref(),
+            config.ai_model.as_deref(),
+            config.ai_api_key.as_deref(),
+        ),
+        (Some(_), Some(_), Some(_))
+    )
+}
+
 pub fn clear_wifi_credentials(layout: &Layout) -> io::Result<ClawPiConfig> {
     layout.ensure_dirs()?;
 
@@ -524,6 +578,13 @@ pub fn write_setup_state(layout: &Layout) -> io::Result<SystemState> {
         content.push_str(&format!("runtime_profile={}\n", config.runtime_profile));
         content.push_str(&format!("wifi_country={}\n", config.wifi_country));
         content.push_str(&format!("wifi_configured={}\n", config.wifi_ssid.is_some()));
+        content.push_str(&format!("ai_configured={}\n", ai_configured(config)));
+        if let Some(provider) = &config.ai_provider {
+            content.push_str(&format!("ai_provider={provider}\n"));
+        }
+        if let Some(model) = &config.ai_model {
+            content.push_str(&format!("ai_model={model}\n"));
+        }
     }
 
     if let Some(reason) = state.config_status.error() {
@@ -631,6 +692,9 @@ fn default_config(layout: &Layout) -> io::Result<ClawPiConfig> {
         wifi_country: String::from(DEFAULT_WIFI_COUNTRY),
         wifi_ssid: None,
         wifi_passphrase: None,
+        ai_provider: None,
+        ai_model: None,
+        ai_api_key: None,
     };
 
     validate_config(&config).map_err(invalid_data)?;
@@ -642,7 +706,7 @@ fn write_config(layout: &Layout, config: &ClawPiConfig) -> io::Result<()> {
     validate_config(config).map_err(invalid_data)?;
 
     let content = format!(
-        "config_version = {}\ndevice_name = {}\nsetup_state = {}\nruntime_profile = {}\nwifi_country = {}\n{}{}",
+        "config_version = {}\ndevice_name = {}\nsetup_state = {}\nruntime_profile = {}\nwifi_country = {}\n{}{}{}{}{}",
         config.config_version,
         format_string(&config.device_name),
         format_string(config.setup_state.as_str()),
@@ -650,6 +714,9 @@ fn write_config(layout: &Layout, config: &ClawPiConfig) -> io::Result<()> {
         format_string(&config.wifi_country),
         optional_config_line("wifi_ssid", config.wifi_ssid.as_deref()),
         optional_config_line("wifi_passphrase", config.wifi_passphrase.as_deref()),
+        optional_config_line("ai_provider", config.ai_provider.as_deref()),
+        optional_config_line("ai_model", config.ai_model.as_deref()),
+        optional_config_line("ai_api_key", config.ai_api_key.as_deref()),
     );
     fs::write(layout.config_path(), content)?;
     remove_if_exists(&layout.legacy_setup_complete_path())?;
@@ -695,6 +762,24 @@ fn validate_config(config: &ClawPiConfig) -> Result<(), String> {
         }
     }
 
+    match (
+        config.ai_provider.as_deref(),
+        config.ai_model.as_deref(),
+        config.ai_api_key.as_deref(),
+    ) {
+        (None, None, None) => {}
+        (Some(provider), Some(model), Some(api_key)) => {
+            normalize_ai_provider(provider)?;
+            normalize_ai_model(model)?;
+            normalize_ai_api_key(api_key)?;
+        }
+        _ => {
+            return Err(String::from(
+                "ai_provider, ai_model, and ai_api_key must be set together",
+            ))
+        }
+    }
+
     Ok(())
 }
 
@@ -706,6 +791,9 @@ fn parse_config(content: &str) -> Result<ClawPiConfig, String> {
     let mut wifi_country = None;
     let mut wifi_ssid = None;
     let mut wifi_passphrase = None;
+    let mut ai_provider = None;
+    let mut ai_model = None;
+    let mut ai_api_key = None;
 
     for (index, raw_line) in content.lines().enumerate() {
         let line_number = index + 1;
@@ -748,6 +836,15 @@ fn parse_config(content: &str) -> Result<ClawPiConfig, String> {
             "wifi_passphrase" => {
                 wifi_passphrase = Some(parse_string(value, line_number)?);
             }
+            "ai_provider" => {
+                ai_provider = Some(parse_string(value, line_number)?);
+            }
+            "ai_model" => {
+                ai_model = Some(parse_string(value, line_number)?);
+            }
+            "ai_api_key" => {
+                ai_api_key = Some(parse_string(value, line_number)?);
+            }
             _ => return Err(format!("line {line_number}: unsupported key {key}")),
         }
     }
@@ -764,6 +861,9 @@ fn parse_config(content: &str) -> Result<ClawPiConfig, String> {
         wifi_country: wifi_country.unwrap_or_else(|| String::from(DEFAULT_WIFI_COUNTRY)),
         wifi_ssid,
         wifi_passphrase,
+        ai_provider,
+        ai_model,
+        ai_api_key,
     };
 
     validate_config(&config)?;
@@ -798,6 +898,34 @@ fn normalize_wifi_country(value: &str) -> Result<String, String> {
         return Err(format!("invalid wifi_country: {value}"));
     }
     Ok(trimmed.to_ascii_uppercase())
+}
+
+fn normalize_ai_provider(value: &str) -> Result<String, String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Err(String::from("ai_provider must not be empty"));
+    }
+
+    match normalized.as_str() {
+        DEFAULT_AI_PROVIDER => Ok(normalized),
+        _ => Err(format!("unsupported ai_provider: {value}")),
+    }
+}
+
+fn normalize_ai_model(value: &str) -> Result<String, String> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(String::from("ai_model must not be empty"));
+    }
+    Ok(normalized.to_string())
+}
+
+fn normalize_ai_api_key(value: &str) -> Result<String, String> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(String::from("ai_api_key must not be empty"));
+    }
+    Ok(normalized.to_string())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -997,6 +1125,26 @@ mod tests {
         assert_eq!(config.wifi_country, "US");
         assert_eq!(config.wifi_ssid.as_deref(), Some("ClawNet"));
         assert_eq!(config.wifi_passphrase.as_deref(), Some("verysecret"));
+
+        cleanup_test_root(&root);
+    }
+
+    #[test]
+    fn set_ai_profile_writes_optional_ai_fields() {
+        let root = unique_test_root();
+        let layout = Layout::from_root(&root);
+
+        set_ai_profile(&layout, "OpenAI", Some("gpt-5.4"), "sk-test-secret").unwrap();
+
+        let state = inspect_state(&layout).unwrap();
+        let config = match state.config_status {
+            ConfigStatus::Valid(config) => config,
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => panic!("expected config"),
+        };
+        assert_eq!(config.ai_provider.as_deref(), Some("openai"));
+        assert_eq!(config.ai_model.as_deref(), Some("gpt-5.4"));
+        assert_eq!(config.ai_api_key.as_deref(), Some("sk-test-secret"));
+        assert!(ai_configured(&config));
 
         cleanup_test_root(&root);
     }
