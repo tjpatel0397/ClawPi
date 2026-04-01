@@ -52,6 +52,34 @@ The runtime stack exists to help ClawPi become an agentic operating system.
 
 That means ClawPi should use runtime capabilities where they already exist, but the repo itself should stay focused on the OS-level experience.
 
+The most likely direction is reusing or forking ZeroClaw, OpenClaw, or a
+similar Rust-first high-performance runtime as the embedded Claw core inside
+the OS.
+
+That runtime should be treated as a deeply integrated system component, not as
+an optional app bolted onto Linux later.
+
+ClawPi should wrap that runtime with OS-owned behavior like:
+
+- boot targets
+- first-boot setup
+- ownership and pairing later
+- recovery and reset behavior
+- device defaults
+- hardware integration
+- local browser handoff
+
+ClawPi should prefer integration over reimplementation.
+
+If ZeroClaw/OpenClaw already solves a runtime problem well, ClawPi should reuse
+or adapt it before rebuilding that capability from scratch.
+
+At the same time, ClawPi does not need to inherit the default ZeroClaw UX
+unchanged.
+
+The runtime can drift in presentation and flow so it feels native to a
+dedicated ClawPi device instead of a generic agent product.
+
 ## System shape
 
 ClawPi can be thought of as having three layers.
@@ -96,11 +124,13 @@ This layer provides the agent-facing behavior that helps ClawPi feel like an age
 
 Examples of things that may live here or connect here include:
 
+- a ZeroClaw/OpenClaw-style local agent daemon
 - browser automation
 - MCP support
 - memory
 - task execution
 - scheduling
+- shell and OS command execution
 - pairing
 - dashboards or management surfaces
 
@@ -173,8 +203,10 @@ At the moment this looks like:
 - if the AI fields are missing, `clawpi-webd` becomes a first-run setup shell that asks for the local Claw provider, model, and API key
 - once those AI fields are present, `clawpi-webd` turns into a narrow local Claw console with a single prompt surface and tucked-away settings
 - today that local gateway is still intentionally narrow: it is more of an OS-owned proving-ground surface than a full agent runtime
-- the current AI auth path is API-key based and OpenAI-only; the next auth design step is supporting a second path similar to ZeroClaw/OpenClaw where a GPT-style account flow can be used instead of only raw API keys
-- the next runtime step is wiring that local console into deeper on-device action-taking and OS command execution
+- the current prompt path is still a proving-ground OpenAI call from `clawpi-webd`, not a deeply embedded local agent runtime
+- the runtime target is to reuse or fork ZeroClaw/OpenClaw or a similar Rust-based agent core and run it as a system-level Claw service inside normal mode
+- that embedded runtime should own sessions, memory, tool use, shell access, and long-running task behavior, while `clawpi-webd` stays a front end
+- auth is only one slice of that work; ClawPi may still support both raw API keys and a GPT-style account flow later
 - `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
 
 This is a proving-ground path, not the final image design.

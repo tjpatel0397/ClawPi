@@ -94,19 +94,24 @@ This is where ClawPi starts to feel like a system instead of just a codebase.
 Goal:
 
 - wire ClawPi into the agent/runtime layer in a clean way
+- embed the Claw runtime as a system component instead of a normal app
+- reuse or fork ZeroClaw/OpenClaw where that gives ClawPi a strong starting point
 
 Outputs:
 
 - runtime wiring
+- embedded local agent daemon
 - browser/tool integration path
 - memory/task direction
+- shell/OS command execution path
 - example system behavior
 
 Current status:
 
 - the repo includes a minimal normal-mode daemon started from `clawpi.target`
 - that daemon writes runtime status under `/run/clawpi`
-- this is only the first runtime foothold, not the full agent/runtime layer
+- `clawpi-webd` currently talks to an OpenAI proving-ground path directly
+- this is only the first runtime foothold, not the full embedded agent/runtime layer
 
 This phase should focus on integration, not on rebuilding everything from scratch.
 
@@ -159,9 +164,10 @@ Current status:
 - normal mode now includes a local browser handoff so the setup phone can continue at `http://<device-name>.local/`
 - the local browser handoff now includes the next OS-owned setup step: storing AI provider, model, and API key from the device itself
 - `clawpi.local` now exposes a setup-first Claw console: configure the AI runtime, then ask a simple prompt without SSH
-- the next step for that console is wiring it into deeper on-device action-taking instead of adding dashboard complexity back into the page
+- the next step for that console is putting a real local agent runtime behind it instead of expanding the page into a dashboard
 - the current AI setup path is API-key based and OpenAI-only
-- the next auth step is exploring a second path similar to ZeroClaw/OpenClaw where a GPT-style account flow can be used instead of only raw API keys
+- the runtime direction is to reuse or fork ZeroClaw/OpenClaw or a similar Rust-based agent core and integrate it deeply into normal mode
+- ClawPi may still drift parts of the default ZeroClaw UX so the device feels simpler and more native
 - the first real arm64 `pi-gen` build on the CM5 now completes and produces a flashable artifact
 - the next proving-ground step is flashing that image to CM5 eMMC and validating the headless onboarding flow
 - the full end-to-end flashable image flow still needs to be completed

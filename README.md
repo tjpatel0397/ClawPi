@@ -50,6 +50,7 @@ ClawPi is being built to explore things like:
 
 - first-boot setup without needing a monitor
 - agent-native system behavior
+- a deeply embedded local agent runtime instead of a bolt-on chat app
 - built-in automation and action-taking
 - memory and long-running context
 - browser and tool use
@@ -89,7 +90,7 @@ The repo now includes:
 - local AI setup fields in the ClawPi config contract so the device can be given its provider, model, and API key after Wi-Fi onboarding
 - a small browser-based local console that starts with AI setup and then turns into a focused prompt surface for talking to the device
 - a proving-ground `clawpi.local` flow that is now functional end-to-end as a setup-first handoff instead of a dense management page
-- an API-key-based OpenAI path for waking Claw after Wi-Fi setup, with a future account-based GPT sign-in flow still to be designed
+- an API-key-based OpenAI proving-ground path for waking Claw after Wi-Fi setup
 - a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
 - a recovery handoff that redirects the device back into setup mode
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout
@@ -100,9 +101,10 @@ The repo now includes:
 ClawPi can now produce a first flashable image, but the full OS experience is
 still early.
 
-The local browser step is now shaped like a simple device console: configure
-the AI runtime, then talk to Claw through a narrow prompt surface on
-`clawpi.local`. The next runtime step is wiring that surface into deeper
-on-device action-taking and OS command execution, while the next auth step is
-to keep the raw API key path and also explore an account-based GPT sign-in flow
-similar to the ZeroClaw/OpenClaw direction.
+The intended runtime direction is to reuse or fork ZeroClaw, OpenClaw, or a
+similar Rust-first high-performance agent runtime as the embedded Claw core of
+the operating system. ClawPi should wrap that runtime in OS-owned boot, setup,
+recovery, ownership, and device integration, while still leaving room to drift
+the usual ZeroClaw UX toward something that feels more native on a dedicated
+device. The current `clawpi.local` console is only the proving-ground front end
+for that deeper system integration, not the final architecture.
