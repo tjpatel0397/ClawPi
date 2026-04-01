@@ -335,18 +335,14 @@ impl PortalRuntime {
             }
         }
 
-        if !has_ipv4_address(AP_INTERFACE)? {
-            if uses_ifupdown {
-                let _ = command_succeeds("ifup", &["--force", AP_INTERFACE]);
-            } else {
-                for (program, args) in [
-                    ("dhcpcd", vec!["-n", AP_INTERFACE]),
-                    ("dhclient", vec!["-1", AP_INTERFACE]),
-                    ("udhcpc", vec!["-n", "-q", "-i", AP_INTERFACE]),
-                ] {
-                    if command_succeeds(program, &args) {
-                        break;
-                    }
+        if !uses_ifupdown && !has_ipv4_address(AP_INTERFACE)? {
+            for (program, args) in [
+                ("dhcpcd", vec!["-n", AP_INTERFACE]),
+                ("dhclient", vec!["-1", AP_INTERFACE]),
+                ("udhcpc", vec!["-n", "-q", "-i", AP_INTERFACE]),
+            ] {
+                if command_succeeds(program, &args) {
+                    break;
                 }
             }
         }
