@@ -237,6 +237,7 @@ impl PortalRuntime {
 
         mark_setup_complete(&self.layout, true)?;
         record_mode(&self.layout, Mode::Normal)?;
+        let _ = restart_unit_if_loaded("avahi-daemon.service");
         self.write_connected_status(expected_ssid)?;
         start_unit(Mode::Normal.target_name())?;
 
@@ -644,12 +645,12 @@ impl PortalRuntime {
         let hostname = self.current_local_hostname()?;
 
         if command_succeeds("hostnamectl", &["set-hostname", &hostname]) {
-            let _ = start_unit_if_loaded("avahi-daemon.service");
+            let _ = restart_unit_if_loaded("avahi-daemon.service");
             return Ok(());
         }
 
         let _ = command_succeeds("hostname", &[&hostname]);
-        let _ = start_unit_if_loaded("avahi-daemon.service");
+        let _ = restart_unit_if_loaded("avahi-daemon.service");
         Ok(())
     }
 
@@ -1070,6 +1071,22 @@ fn start_unit_if_loaded(unit: &str) -> io::Result<bool> {
 
     start_unit(unit)?;
     Ok(true)
+}
+
+fn restart_unit_if_loaded(unit: &str) -> io::Result<bool> {
+    if !unit_is_loaded(unit)? {
+        return Ok(false);
+    }
+
+    match Command::new("systemctl").args(["restart", unit]).status() {
+        Ok(status) if status.success() => Ok(true),
+        Ok(status) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("systemctl exited with status {status}"),
+        )),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(err),
+    }
 }
 
 fn unit_is_loaded(unit: &str) -> io::Result<bool> {
