@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt;
 use std::fs;
@@ -128,6 +129,33 @@ pub struct Layout {
     root: PathBuf,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AgentPromptRequest {
+    pub prompt: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AgentPromptResponse {
+    pub reply: Option<String>,
+    pub error: Option<String>,
+}
+
+impl AgentPromptResponse {
+    pub fn success(reply: impl Into<String>) -> Self {
+        Self {
+            reply: Some(reply.into()),
+            error: None,
+        }
+    }
+
+    pub fn failure(error: impl Into<String>) -> Self {
+        Self {
+            reply: None,
+            error: Some(error.into()),
+        }
+    }
+}
+
 impl Layout {
     pub fn detect() -> Self {
         let root = env::var_os("CLAWPI_ROOT")
@@ -166,6 +194,14 @@ impl Layout {
 
     pub fn session_status_path(&self) -> PathBuf {
         self.run_dir().join("sessiond.status")
+    }
+
+    pub fn agent_status_path(&self) -> PathBuf {
+        self.run_dir().join("agentd.status")
+    }
+
+    pub fn agent_socket_path(&self) -> PathBuf {
+        self.run_dir().join("agentd.sock")
     }
 
     pub fn recovery_status_path(&self) -> PathBuf {

@@ -3,4 +3,5 @@ Description=ClawPi normal operating target
 AllowIsolate=yes
 StopWhenUnneeded=yes
 Wants=clawpi-sessiond.service
+Wants=clawpi-agentd.service
 Wants=clawpi-webd.service

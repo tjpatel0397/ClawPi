@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/clawpi-agentd",
     "crates/clawpi-core",
     "crates/clawpi-init",
     "crates/clawpi-portald",

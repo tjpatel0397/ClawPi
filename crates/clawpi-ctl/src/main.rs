@@ -110,6 +110,8 @@ fn print_status() -> ExitCode {
                 "session_status_path={}",
                 layout.session_status_path().display()
             );
+            println!("agent_status_path={}", layout.agent_status_path().display());
+            println!("agent_socket_path={}", layout.agent_socket_path().display());
             println!(
                 "recovery_status_path={}",
                 layout.recovery_status_path().display()
@@ -191,6 +193,28 @@ fn print_status() -> ExitCode {
                 Ok(None) => println!("session_status=absent"),
                 Err(err) => {
                     eprintln!("failed to read session status: {err}");
+                    return ExitCode::from(1);
+                }
+            }
+
+            match read_optional_file(&layout.agent_status_path()) {
+                Ok(Some(content)) => {
+                    println!(
+                        "agent_status={}",
+                        lookup_field(&content, "status").unwrap_or("unknown")
+                    );
+                    println!(
+                        "agent_socket={}",
+                        lookup_field(&content, "socket").unwrap_or("unknown")
+                    );
+                    println!(
+                        "agent_note={}",
+                        lookup_field(&content, "note").unwrap_or("unknown")
+                    );
+                }
+                Ok(None) => println!("agent_status=absent"),
+                Err(err) => {
+                    eprintln!("failed to read agent status: {err}");
                     return ExitCode::from(1);
                 }
             }

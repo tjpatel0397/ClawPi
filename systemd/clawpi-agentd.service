@@ -1,0 +1,10 @@
+[Unit]
+Description=ClawPi local agent runtime service
+ConditionPathExists=/usr/local/libexec/clawpi/clawpi-agentd
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/clawpi/clawpi-agentd
+Restart=on-failure
+RestartSec=2

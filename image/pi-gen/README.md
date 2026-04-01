@@ -130,10 +130,11 @@ temporary setup network and local setup page on first boot, including
 captive-portal hints and a direct `http://192.168.64.1/` fallback when local
 DNS does not resolve `setup.clawpi`.
 
-The same image payload now also installs `avahi-daemon` and a small
-`clawpi-webd` local gateway service so a successful phone setup can hand off to
-`http://<device-name>.local/`, store the AI provider/model/API key on-device,
-and continue into a setup-first local Claw console instead of
+The same image payload now also installs `avahi-daemon`, a small
+`clawpi-agentd` local agent service, and `clawpi-webd` as its browser front end
+so a successful phone setup can hand off to `http://<device-name>.local/`,
+store the AI provider/model/API key on-device, and continue into a setup-first
+local Claw console instead of
 requiring SSH.
 
 If the build host is missing `pi-gen` prerequisites, use

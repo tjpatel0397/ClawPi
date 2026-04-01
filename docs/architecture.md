@@ -198,12 +198,13 @@ At the moment this looks like:
 - `clawpi-portald` marks setup complete only after the device has joined the submitted Wi-Fi network and then starts `clawpi.target`
 - the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` now starts `clawpi-sessiond`, which keeps a minimal runtime heartbeat under `/run/clawpi`
+- `clawpi.target` now also starts `clawpi-agentd`, which listens on a local Unix socket under `/run/clawpi` and owns prompt execution for the proving ground
 - the same `/etc/clawpi/config.toml` contract now also carries the first AI runtime fields: provider, model, and API key
 - `clawpi.target` also starts `clawpi-webd`, which serves the local browser control surface at `http://<device-name>.local/`
 - if the AI fields are missing, `clawpi-webd` becomes a first-run setup shell that asks for the local Claw provider, model, and API key
 - once those AI fields are present, `clawpi-webd` turns into a narrow local Claw console with a single prompt surface and tucked-away settings
 - today that local gateway is still intentionally narrow: it is more of an OS-owned proving-ground surface than a full agent runtime
-- the current prompt path is still a proving-ground OpenAI call from `clawpi-webd`, not a deeply embedded local agent runtime
+- the current prompt path now crosses a local runtime boundary: `clawpi-webd` sends prompt requests to `clawpi-agentd`, and `clawpi-agentd` owns the proving-ground model call
 - the runtime target is to reuse or fork ZeroClaw/OpenClaw or a similar Rust-based agent core and run it as a system-level Claw service inside normal mode
 - that embedded runtime should own sessions, memory, tool use, shell access, and long-running task behavior, while `clawpi-webd` stays a front end
 - auth is only one slice of that work; ClawPi may still support both raw API keys and a GPT-style account flow later

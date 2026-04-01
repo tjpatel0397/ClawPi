@@ -90,8 +90,8 @@ The repo now includes:
 - local AI setup fields in the ClawPi config contract so the device can be given its provider, model, and API key after Wi-Fi onboarding
 - a small browser-based local console that starts with AI setup and then turns into a focused prompt surface for talking to the device
 - a proving-ground `clawpi.local` flow that is now functional end-to-end as a setup-first handoff instead of a dense management page
-- an API-key-based OpenAI proving-ground path for waking Claw after Wi-Fi setup
-- a minimal normal-mode daemon that writes runtime state under `/run/clawpi`
+- a first local `clawpi-agentd` service that moves prompt execution behind a Unix-socket runtime boundary under `/run/clawpi`
+- a minimal normal-mode runtime pair where `clawpi-sessiond` writes heartbeat state and `clawpi-agentd` owns prompt handling
 - a recovery handoff that redirects the device back into setup mode
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout
 - a small `scripts/install_pi_gen_deps.sh` helper for preparing a Debian build host

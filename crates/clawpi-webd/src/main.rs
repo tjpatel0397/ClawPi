@@ -1,16 +1,14 @@
 use clawpi_core::{
     ai_configured, device_hostname_label, inspect_state, local_url_for_device_name,
-    read_optional_file, set_ai_profile, ClawPiConfig, Layout, Mode, DEFAULT_AI_MODEL,
-    DEFAULT_AI_PROVIDER,
+    read_optional_file, set_ai_profile, AgentPromptRequest, AgentPromptResponse, ClawPiConfig,
+    Layout, Mode, DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER,
 };
-use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::time::Duration;
-
-const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
 
 fn main() -> ExitCode {
     let layout = Layout::detect();
@@ -221,7 +219,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                 return Ok(());
             }
 
-            match prompt_claw(config, prompt) {
+            match prompt_claw(layout, prompt) {
                 Ok(reply) => {
                     write_http_response(
                         stream,
@@ -275,9 +273,12 @@ fn render_status_text(layout: &Layout, config: &ClawPiConfig) -> io::Result<Stri
     let session_status = read_optional_file(&layout.session_status_path())?
         .and_then(|content| lookup_field(&content, "status").map(String::from))
         .unwrap_or_else(|| String::from("absent"));
+    let agent_status = read_optional_file(&layout.agent_status_path())?
+        .and_then(|content| lookup_field(&content, "status").map(String::from))
+        .unwrap_or_else(|| String::from("absent"));
 
     Ok(format!(
-        "status=ready\ndevice_name={}\nhostname={hostname}\nlocal_url={local_url}\nsession_status={session_status}\nai_configured={}\nai_provider={}\nai_model={}\n",
+        "status=ready\ndevice_name={}\nhostname={hostname}\nlocal_url={local_url}\nsession_status={session_status}\nagent_status={agent_status}\nai_configured={}\nai_provider={}\nai_model={}\n",
         config.device_name,
         ai_configured(config),
         config.ai_provider.as_deref().unwrap_or("unset"),
@@ -506,7 +507,7 @@ fn render_chat_view(
                  <label class=\"visually-hidden\" for=\"prompt\">Message Claw</label>\
                  <textarea id=\"prompt\" name=\"prompt\" rows=\"4\" class=\"composer-box\" placeholder=\"Ask a question about this device or what you want it to do next.\" autofocus>{draft_prompt}</textarea>\
                  <div class=\"composer-row\">\
-                   <p class=\"composer-note\">Claw replies through the configured local gateway.</p>\
+                   <p class=\"composer-note\">Claw replies through the local agent service running on this device.</p>\
                    <button type=\"submit\">Send</button>\
                  </div>\
                </form>\
@@ -852,105 +853,53 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     )
 }
 
-fn prompt_claw(config: &ClawPiConfig, prompt: &str) -> io::Result<String> {
-    if !ai_configured(config) {
+fn prompt_claw(layout: &Layout, prompt: &str) -> io::Result<String> {
+    let mut stream = match UnixStream::connect(layout.agent_socket_path()) {
+        Ok(stream) => stream,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "local Claw agent is not running yet",
+            ))
+        }
+        Err(err) if err.kind() == io::ErrorKind::ConnectionRefused => {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionRefused,
+                "local Claw agent is unavailable",
+            ))
+        }
+        Err(err) => return Err(err),
+    };
+
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let request = AgentPromptRequest {
+        prompt: prompt.to_string(),
+    };
+    let body = serde_json::to_vec(&request)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
+    stream.write_all(&body)?;
+    stream.shutdown(Shutdown::Write)?;
+
+    stream.set_read_timeout(Some(Duration::from_secs(70)))?;
+    let mut response_body = Vec::new();
+    stream.read_to_end(&mut response_body)?;
+    if response_body.is_empty() {
         return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "AI is not configured yet",
+            io::ErrorKind::UnexpectedEof,
+            "local Claw agent returned no response",
         ));
     }
 
-    let provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
-    match provider {
-        DEFAULT_AI_PROVIDER => prompt_openai(config, prompt),
+    let response: AgentPromptResponse = serde_json::from_slice(&response_body)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
+
+    match (response.reply, response.error) {
+        (Some(reply), None) => Ok(reply),
+        (None, Some(error)) => Err(io::Error::new(io::ErrorKind::Other, error)),
         _ => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unsupported ai provider: {provider}"),
+            io::ErrorKind::InvalidData,
+            "local Claw agent returned an invalid response",
         )),
-    }
-}
-
-fn prompt_openai(config: &ClawPiConfig, prompt: &str) -> io::Result<String> {
-    let api_key = config
-        .ai_api_key
-        .as_deref()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing ai_api_key"))?;
-    let model = config.ai_model.as_deref().unwrap_or(DEFAULT_AI_MODEL);
-    let instructions = format!(
-        "You are Claw, the local operating-system companion for a Raspberry Pi device named {}. Reply like an on-device agent console: concise, practical, and device-oriented. Avoid unnecessary formatting. If the user asks you to take actions that are not wired into this local gateway yet, say so directly and suggest the next step.",
-        config.device_name
-    );
-
-    let payload = json!({
-        "model": model,
-        "instructions": instructions,
-        "input": prompt,
-    });
-
-    let response = ureq::post(OPENAI_RESPONSES_URL)
-        .set("Authorization", &format!("Bearer {api_key}"))
-        .set("Content-Type", "application/json")
-        .set("Accept", "application/json")
-        .timeout(Duration::from_secs(60))
-        .send_json(payload);
-
-    let value: Value = match response {
-        Ok(response) => response
-            .into_json()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?,
-        Err(ureq::Error::Status(_, response)) => {
-            let body = response
-                .into_string()
-                .unwrap_or_else(|_| String::from("request failed"));
-            let message = serde_json::from_str::<Value>(&body)
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("error")
-                        .and_then(|error| error.get("message"))
-                        .and_then(Value::as_str)
-                        .map(String::from)
-                })
-                .unwrap_or(body);
-            return Err(io::Error::new(io::ErrorKind::Other, message));
-        }
-        Err(ureq::Error::Transport(err)) => {
-            return Err(io::Error::new(io::ErrorKind::Other, err.to_string()))
-        }
-    };
-
-    extract_response_text(&value).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            "OpenAI response did not include assistant text",
-        )
-    })
-}
-
-fn extract_response_text(value: &Value) -> Option<String> {
-    if let Some(text) = value.get("output_text").and_then(Value::as_str) {
-        let trimmed = text.trim();
-        if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
-        }
-    }
-
-    let mut parts = Vec::new();
-    for output in value.get("output")?.as_array()? {
-        for content in output.get("content")?.as_array()? {
-            if let Some(text) = content.get("text").and_then(Value::as_str) {
-                let trimmed = text.trim();
-                if !trimmed.is_empty() {
-                    parts.push(trimmed.to_string());
-                }
-            }
-        }
-    }
-
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join("\n\n"))
     }
 }
 

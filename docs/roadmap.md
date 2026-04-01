@@ -110,7 +110,8 @@ Current status:
 
 - the repo includes a minimal normal-mode daemon started from `clawpi.target`
 - that daemon writes runtime status under `/run/clawpi`
-- `clawpi-webd` currently talks to an OpenAI proving-ground path directly
+- the repo now includes a first `clawpi-agentd` service that owns prompt execution behind a local Unix-socket boundary
+- `clawpi-webd` now acts as a front end that talks to that local agent service instead of calling the model directly
 - this is only the first runtime foothold, not the full embedded agent/runtime layer
 
 This phase should focus on integration, not on rebuilding everything from scratch.
@@ -164,7 +165,7 @@ Current status:
 - normal mode now includes a local browser handoff so the setup phone can continue at `http://<device-name>.local/`
 - the local browser handoff now includes the next OS-owned setup step: storing AI provider, model, and API key from the device itself
 - `clawpi.local` now exposes a setup-first Claw console: configure the AI runtime, then ask a simple prompt without SSH
-- the next step for that console is putting a real local agent runtime behind it instead of expanding the page into a dashboard
+- that console now talks to a first local `clawpi-agentd` proving-ground daemon instead of running prompt handling inside `clawpi-webd`
 - the current AI setup path is API-key based and OpenAI-only
 - the runtime direction is to reuse or fork ZeroClaw/OpenClaw or a similar Rust-based agent core and integrate it deeply into normal mode
 - ClawPi may still drift parts of the default ZeroClaw UX so the device feels simpler and more native
