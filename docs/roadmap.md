@@ -168,7 +168,7 @@ Current status:
 - `clawpi.local` now exposes a setup-first Claw console: configure the AI runtime, then ask a simple prompt without SSH
 - that console now talks to a first local `clawpi-agentd` proving-ground daemon instead of running prompt handling inside `clawpi-webd`
 - that daemon now wraps upstream ZeroClaw so prompts, tool use, and shell execution come from the reused runtime core
-- the current AI setup path is API-key based and OpenAI-only
+- the current AI setup path is now ZeroClaw-backed and provider-configurable from the device itself
 - the runtime direction is to reuse or fork ZeroClaw/OpenClaw or a similar Rust-based agent core and integrate it deeply into normal mode
 - ClawPi may still drift parts of the default ZeroClaw UX so the device feels simpler and more native
 - the first real arm64 `pi-gen` build on the CM5 now completes and produces a flashable artifact

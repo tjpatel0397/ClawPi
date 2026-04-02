@@ -132,14 +132,7 @@ fn prompt_claw(
         ));
     }
 
-    let provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
-    match provider {
-        DEFAULT_AI_PROVIDER => runtime.block_on(prompt_zeroclaw(layout, config, prompt)),
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unsupported ai provider: {provider}"),
-        )),
-    }
+    runtime.block_on(prompt_zeroclaw(layout, config, prompt))
 }
 
 async fn prompt_zeroclaw(
@@ -370,11 +363,11 @@ mod tests {
         );
         assert_eq!(
             serialized["default_provider"],
-            serde_json::Value::String(String::from("openai"))
+            serde_json::Value::String(String::from("openrouter"))
         );
         assert_eq!(
             serialized["default_model"],
-            serde_json::Value::String(String::from("gpt-5.4"))
+            serde_json::Value::String(String::from("anthropic/claude-sonnet-4.6"))
         );
         assert_eq!(
             serialized["autonomy"]["level"],
@@ -408,6 +401,31 @@ mod tests {
         assert!(agents.contains("You are Claw"));
         assert!(identity.contains("Product: ClawPi"));
         assert!(bootstrap.contains("ZeroClaw-backed runtime"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn build_zeroclaw_config_preserves_non_openai_provider() {
+        let root = temp_root();
+        let layout = Layout::from_root(&root);
+        layout.ensure_dirs().unwrap();
+
+        let mut config = test_config();
+        config.ai_provider = Some(String::from("openrouter"));
+        config.ai_model = Some(String::from("anthropic/claude-sonnet-4.6"));
+
+        let zeroclaw_config = build_zeroclaw_config(&layout, &config).unwrap();
+        let serialized = serde_json::to_value(&zeroclaw_config).unwrap();
+
+        assert_eq!(
+            serialized["default_provider"],
+            serde_json::Value::String(String::from("openrouter"))
+        );
+        assert_eq!(
+            serialized["default_model"],
+            serde_json::Value::String(String::from("anthropic/claude-sonnet-4.6"))
+        );
 
         fs::remove_dir_all(root).unwrap();
     }

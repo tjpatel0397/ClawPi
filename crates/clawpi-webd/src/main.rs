@@ -10,6 +10,15 @@ use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::time::Duration;
 
+const PROVIDER_PRESETS: &[(&str, &str)] = &[
+    ("openrouter", "OpenRouter"),
+    ("anthropic", "Anthropic"),
+    ("openai", "OpenAI"),
+    ("ollama", "Ollama"),
+    ("groq", "Groq"),
+    ("gemini", "Google Gemini"),
+];
+
 fn main() -> ExitCode {
     let layout = Layout::detect();
 
@@ -135,10 +144,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
         }
         ("POST", "/configure-ai") => {
             let fields = parse_form_urlencoded(&String::from_utf8_lossy(&request.body));
-            let provider = fields
-                .get("provider")
-                .map(String::as_str)
-                .unwrap_or(DEFAULT_AI_PROVIDER);
+            let provider = resolve_provider(&fields);
             let model = fields
                 .get("model")
                 .map(|value| value.trim())
@@ -153,7 +159,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                 submitted_api_key
             };
 
-            match set_ai_profile(layout, provider, model, api_key) {
+            match set_ai_profile(layout, &provider, model, api_key) {
                 Ok(_) => {
                     let updated_state = inspect_state(layout)?;
                     let updated_config =
@@ -310,11 +316,6 @@ fn render_home_page(
     let wifi_ssid = config.wifi_ssid.as_deref().unwrap_or("unset");
     let ai_provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
     let ai_model = config.ai_model.as_deref().unwrap_or(DEFAULT_AI_MODEL);
-    let ai_provider_label = if ai_provider.eq_ignore_ascii_case(DEFAULT_AI_PROVIDER) {
-        "OpenAI"
-    } else {
-        ai_provider
-    };
 
     let notice_html = notice
         .map(|value| format!("<p class=\"notice notice-ok\">{}</p>", escape_html(value)))
@@ -334,7 +335,7 @@ fn render_home_page(
             &hostname,
             &local_url,
             wifi_ssid,
-            ai_provider_label,
+            ai_provider,
             ai_model,
             session_status,
             session_mode,
@@ -372,7 +373,7 @@ fn render_setup_view(
         "sk-...",
         true,
         true,
-        "This API key stays on the device and is used by the local Claw gateway.",
+        "This credential stays on the device and is handed into the embedded ZeroClaw runtime.",
     );
 
     format!(
@@ -398,7 +399,7 @@ fn render_setup_view(
                <section class=\"panel intro-panel\">\
                  <p class=\"eyebrow\">Finish onboarding</p>\
                  <h2>Configure Claw</h2>\
-                 <p>This browser handoff should stay narrow: configure the model, store the key, then switch into a single prompt surface at <strong>{local_url}</strong>.</p>\
+                 <p>This browser handoff should stay narrow: choose the ZeroClaw provider, model, and credential, then switch into a single prompt surface at <strong>{local_url}</strong>.</p>\
                  <div class=\"meta-stack\">\
                    <div class=\"meta-row\"><span>Device</span><strong>{device_name}</strong></div>\
                    <div class=\"meta-row\"><span>Hostname</span><strong>{hostname}.local</strong></div>\
@@ -408,8 +409,8 @@ fn render_setup_view(
                </section>\
                <section class=\"panel form-panel\">\
                  <p class=\"eyebrow\">AI runtime</p>\
-                 <h2>Connect the model</h2>\
-                 <p>ClawPi currently speaks through OpenAI. Model selection stays editable after setup from inside the local console.</p>\
+                 <h2>Configure the runtime</h2>\
+                 <p>This setup contract now feeds the embedded ZeroClaw runtime directly. Pick the provider you want the device to use, then adjust it later from inside the console.</p>\
                  {ai_form}\
                </section>\
              </div>\
@@ -540,26 +541,20 @@ fn render_ai_form(
 ) -> String {
     let required_attr = if api_key_required { " required" } else { "" };
     let autofocus_attr = if autofocus_api_key { " autofocus" } else { "" };
+    let selected_provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
+    let provider_picker = render_provider_picker(selected_provider);
 
     format!(
         "<form method=\"post\" action=\"/configure-ai\" class=\"config-form\">\
-           <input type=\"hidden\" name=\"provider\" value=\"{provider}\">\
-           <label>Provider</label>\
-           <div class=\"provider-card\">\
-             <div>\
-               <div class=\"provider-name\">OpenAI</div>\
-               <p class=\"provider-note\">First supported runtime for the local Claw gateway.</p>\
-             </div>\
-             <span class=\"chip chip-quiet\">active</span>\
-           </div>\
+           {provider_picker}\
            <label for=\"model\">Model</label>\
            <input id=\"model\" name=\"model\" value=\"{model}\" placeholder=\"{default_model}\" spellcheck=\"false\">\
-           <label for=\"api_key\">API key</label>\
+           <label for=\"api_key\">Credential</label>\
            <input id=\"api_key\" name=\"api_key\" type=\"password\" placeholder=\"{api_key_placeholder}\" autocomplete=\"off\" spellcheck=\"false\"{required_attr}{autofocus_attr}>\
            <p class=\"form-note\">{helper_copy}</p>\
            <button type=\"submit\">{submit_label}</button>\
          </form>",
-        provider = DEFAULT_AI_PROVIDER,
+        provider_picker = provider_picker,
         model = escape_html(config.ai_model.as_deref().unwrap_or(DEFAULT_AI_MODEL)),
         default_model = DEFAULT_AI_MODEL,
         api_key_placeholder = escape_html(api_key_placeholder),
@@ -598,6 +593,87 @@ fn render_transcript(last_prompt: Option<&str>, answer: Option<&str>) -> String 
              </article>",
         ),
     }
+}
+
+fn resolve_provider(fields: &HashMap<String, String>) -> String {
+    let provider_preset = fields
+        .get("provider_preset")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let provider_custom = fields
+        .get("provider_custom")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let legacy_provider = fields
+        .get("provider")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+
+    match provider_preset {
+        Some("custom") => provider_custom
+            .or(legacy_provider)
+            .unwrap_or(DEFAULT_AI_PROVIDER)
+            .to_string(),
+        Some(value) => value.to_string(),
+        None => legacy_provider
+            .or(provider_custom)
+            .unwrap_or(DEFAULT_AI_PROVIDER)
+            .to_string(),
+    }
+}
+
+fn render_provider_picker(selected_provider: &str) -> String {
+    let selected_preset = provider_preset_for(selected_provider);
+    let custom_value = if selected_preset == "custom" {
+        selected_provider
+    } else {
+        ""
+    };
+    let options = PROVIDER_PRESETS
+        .iter()
+        .map(|(value, label)| {
+            let selected_attr = if *value == selected_preset {
+                " selected"
+            } else {
+                ""
+            };
+            format!(
+                "<option value=\"{value}\"{selected_attr}>{label}</option>",
+                value = value,
+                selected_attr = selected_attr,
+                label = escape_html(label),
+            )
+        })
+        .collect::<String>();
+    let custom_selected_attr = if selected_preset == "custom" {
+        " selected"
+    } else {
+        ""
+    };
+
+    format!(
+        "<label for=\"provider_preset\">Provider</label>\
+         <select id=\"provider_preset\" name=\"provider_preset\">\
+           {options}\
+           <option value=\"custom\"{custom_selected_attr}>Custom route</option>\
+         </select>\
+         <p class=\"form-note\">Use a ZeroClaw-friendly preset for the common cases, or switch to Custom route when the embedded runtime should use a provider string that ClawPi does not need to hard-code.</p>\
+         <label for=\"provider_custom\">Custom provider route</label>\
+         <input id=\"provider_custom\" name=\"provider_custom\" value=\"{custom_value}\" placeholder=\"openrouter:my-gateway\" spellcheck=\"false\" autocapitalize=\"off\">\
+         <p class=\"form-note\">Only used when Custom route is selected.</p>",
+        options = options,
+        custom_selected_attr = custom_selected_attr,
+        custom_value = escape_html(custom_value),
+    )
+}
+
+fn provider_preset_for(provider: &str) -> &'static str {
+    let normalized = provider.trim();
+    PROVIDER_PRESETS
+        .iter()
+        .find(|(value, _)| normalized.eq_ignore_ascii_case(value))
+        .map(|(value, _)| *value)
+        .unwrap_or("custom")
 }
 
 fn render_document(device_name: &str, body_html: &str) -> String {
@@ -723,7 +799,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
       letter-spacing: 0.12em;\
       color: var(--muted);\
     }}\
-    input, textarea {{\
+    input, select, textarea {{\
       width: 100%;\
       border: 1px solid #c3cfc3;\
       border-radius: 1rem;\
@@ -733,7 +809,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
       font: inherit;\
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);\
     }}\
-    input:focus, textarea:focus {{\
+    input:focus, select:focus, textarea:focus {{\
       outline: 2px solid rgba(31, 91, 66, 0.18);\
       outline-offset: 2px;\
       border-color: rgba(31, 91, 66, 0.35);\
@@ -1127,6 +1203,8 @@ mod tests {
 
         assert!(html.contains("Configure Claw"));
         assert!(html.contains("Save AI Configuration"));
+        assert!(html.contains("name=\"provider_preset\""));
+        assert!(html.contains("name=\"provider_custom\""));
         assert!(!html.contains("AI settings and device details"));
     }
 
@@ -1134,16 +1212,67 @@ mod tests {
     fn render_home_page_shows_console_after_ai_configuration() {
         let layout = test_layout("console");
         let mut config = base_config();
-        config.ai_provider = Some(String::from(DEFAULT_AI_PROVIDER));
-        config.ai_model = Some(String::from(DEFAULT_AI_MODEL));
+        config.ai_provider = Some(String::from("openrouter"));
+        config.ai_model = Some(String::from("anthropic/claude-sonnet-4.6"));
         config.ai_api_key = Some(String::from("sk-test-secret"));
 
         let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
 
         assert!(html.contains("Ask Claw"));
         assert!(html.contains("AI settings and device details"));
-        assert!(html.contains("OpenAI / gpt-5.4"));
-        assert!(!html.contains("Connect the model"));
+        assert!(html.contains("openrouter / anthropic/claude-sonnet-4.6"));
+        assert!(!html.contains("Connect the runtime"));
+    }
+
+    #[test]
+    fn render_ai_form_selects_custom_route_for_unlisted_providers() {
+        let mut config = base_config();
+        config.ai_provider = Some(String::from("acme/router"));
+
+        let html = render_ai_form(
+            &config,
+            "Update AI Configuration",
+            "Leave blank to keep the current key",
+            false,
+            false,
+            "helper copy",
+        );
+
+        assert!(html.contains("option value=\"custom\" selected"));
+        assert!(html.contains("name=\"provider_custom\" value=\"acme/router\""));
+    }
+
+    #[test]
+    fn resolve_provider_prefers_selected_preset() {
+        let fields = HashMap::from([
+            (String::from("provider_preset"), String::from("ollama")),
+            (
+                String::from("provider_custom"),
+                String::from("should-not-be-used"),
+            ),
+        ]);
+
+        assert_eq!(resolve_provider(&fields), "ollama");
+    }
+
+    #[test]
+    fn resolve_provider_uses_custom_route_when_selected() {
+        let fields = HashMap::from([
+            (String::from("provider_preset"), String::from("custom")),
+            (
+                String::from("provider_custom"),
+                String::from("gateway.example/provider"),
+            ),
+        ]);
+
+        assert_eq!(resolve_provider(&fields), "gateway.example/provider");
+    }
+
+    #[test]
+    fn resolve_provider_preserves_legacy_field_support() {
+        let fields = HashMap::from([(String::from("provider"), String::from("openrouter"))]);
+
+        assert_eq!(resolve_provider(&fields), "openrouter");
     }
 
     fn base_config() -> ClawPiConfig {

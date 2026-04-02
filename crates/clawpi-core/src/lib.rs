@@ -9,8 +9,8 @@ pub const CONFIG_VERSION: u32 = 1;
 pub const RUNTIME_PROFILE: &str = "proving-ground";
 pub const DEFAULT_WIFI_COUNTRY: &str = "US";
 pub const DEFAULT_LOCAL_HOSTNAME: &str = "clawpi";
-pub const DEFAULT_AI_PROVIDER: &str = "openai";
-pub const DEFAULT_AI_MODEL: &str = "gpt-5.4";
+pub const DEFAULT_AI_PROVIDER: &str = "openrouter";
+pub const DEFAULT_AI_MODEL: &str = "anthropic/claude-sonnet-4.6";
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Mode {
@@ -937,15 +937,32 @@ fn normalize_wifi_country(value: &str) -> Result<String, String> {
 }
 
 fn normalize_ai_provider(value: &str) -> Result<String, String> {
-    let normalized = value.trim().to_ascii_lowercase();
-    if normalized.is_empty() {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
         return Err(String::from("ai_provider must not be empty"));
     }
 
-    match normalized.as_str() {
-        DEFAULT_AI_PROVIDER => Ok(normalized),
-        _ => Err(format!("unsupported ai_provider: {value}")),
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        return Err(String::from(
+            "ai_provider must not contain whitespace or control characters",
+        ));
     }
+
+    if trimmed.contains(':') || trimmed.contains('/') || trimmed.contains('.') {
+        return Ok(trimmed.to_string());
+    }
+
+    if trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    {
+        return Ok(trimmed.to_ascii_lowercase());
+    }
+
+    Err(format!("invalid ai_provider: {value}"))
 }
 
 fn normalize_ai_model(value: &str) -> Result<String, String> {
@@ -1181,6 +1198,56 @@ mod tests {
         assert_eq!(config.ai_model.as_deref(), Some("gpt-5.4"));
         assert_eq!(config.ai_api_key.as_deref(), Some("sk-test-secret"));
         assert!(ai_configured(&config));
+
+        cleanup_test_root(&root);
+    }
+
+    #[test]
+    fn set_ai_profile_accepts_non_openai_providers() {
+        let root = unique_test_root();
+        let layout = Layout::from_root(&root);
+
+        set_ai_profile(
+            &layout,
+            "Anthropic",
+            Some("claude-sonnet-4-20250514"),
+            "sk-ant-test",
+        )
+        .unwrap();
+
+        let state = inspect_state(&layout).unwrap();
+        let config = match state.config_status {
+            ConfigStatus::Valid(config) => config,
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => panic!("expected config"),
+        };
+        assert_eq!(config.ai_provider.as_deref(), Some("anthropic"));
+        assert_eq!(config.ai_model.as_deref(), Some("claude-sonnet-4-20250514"));
+
+        cleanup_test_root(&root);
+    }
+
+    #[test]
+    fn set_ai_profile_preserves_custom_provider_routes() {
+        let root = unique_test_root();
+        let layout = Layout::from_root(&root);
+
+        set_ai_profile(
+            &layout,
+            "custom:https://models.example.invalid/v1",
+            Some("gpt-oss"),
+            "sk-custom-test",
+        )
+        .unwrap();
+
+        let state = inspect_state(&layout).unwrap();
+        let config = match state.config_status {
+            ConfigStatus::Valid(config) => config,
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => panic!("expected config"),
+        };
+        assert_eq!(
+            config.ai_provider.as_deref(),
+            Some("custom:https://models.example.invalid/v1")
+        );
 
         cleanup_test_root(&root);
     }
