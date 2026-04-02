@@ -6,6 +6,96 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 ROOT_DIR=/
 ENABLE_UNITS=1
+MIN_RUST_VERSION=1.88.0
+RUSTUP_INIT_URL=https://sh.rustup.rs
+
+version_gte() {
+    awk -v have="$1" -v need="$2" '
+        function normalize(value, parts, count, i) {
+            count = split(value, parts, /\./)
+            for (i = count + 1; i <= 3; i++) {
+                parts[i] = 0
+            }
+        }
+        BEGIN {
+            normalize(have, have_parts)
+            normalize(need, need_parts)
+            for (i = 1; i <= 3; i++) {
+                if ((have_parts[i] + 0) > (need_parts[i] + 0)) {
+                    exit 0
+                }
+                if ((have_parts[i] + 0) < (need_parts[i] + 0)) {
+                    exit 1
+                }
+            }
+            exit 0
+        }
+    '
+}
+
+rustc_version() {
+    rustc --version 2>/dev/null | awk 'NR == 1 { print $2 }'
+}
+
+bootstrap_rustup() {
+    if command -v rustup >/dev/null 2>&1 || [ -x "$HOME/.cargo/bin/rustup" ]; then
+        return 0
+    fi
+
+    echo "clawpi: Rust $MIN_RUST_VERSION or newer is required by the embedded ZeroClaw runtime." >&2
+    echo "clawpi: bootstrapping rustup so this Pi can build the proving-ground payload." >&2
+
+    if command -v curl >/dev/null 2>&1; then
+        curl --proto '=https' --tlsv1.2 -sSf "$RUSTUP_INIT_URL" | sh -s -- -y --profile minimal --default-toolchain stable
+        return 0
+    fi
+
+    if command -v wget >/dev/null 2>&1; then
+        wget -qO- "$RUSTUP_INIT_URL" | sh -s -- -y --profile minimal --default-toolchain stable
+        return 0
+    fi
+
+    echo "clawpi: need curl or wget to bootstrap rustup automatically." >&2
+    exit 1
+}
+
+ensure_build_toolchain() {
+    export PATH="$HOME/.cargo/bin:$PATH"
+
+    current_rustc_version=
+    if command -v rustc >/dev/null 2>&1; then
+        current_rustc_version=$(rustc_version)
+    fi
+
+    if [ -n "$current_rustc_version" ] && version_gte "$current_rustc_version" "$MIN_RUST_VERSION"; then
+        return 0
+    fi
+
+    if [ "$ROOT_DIR" != "/" ] || [ "$(uname -s)" != "Linux" ]; then
+        if [ -n "$current_rustc_version" ]; then
+            echo "clawpi: rustc $current_rustc_version is too old. Install Rust $MIN_RUST_VERSION or newer." >&2
+        else
+            echo "clawpi: rustc is missing. Install Rust $MIN_RUST_VERSION or newer." >&2
+        fi
+        exit 1
+    fi
+
+    bootstrap_rustup
+    export PATH="$HOME/.cargo/bin:$PATH"
+
+    if ! command -v cargo >/dev/null 2>&1 || ! command -v rustup >/dev/null 2>&1; then
+        echo "clawpi: rustup bootstrap did not leave cargo/rustup available on PATH." >&2
+        exit 1
+    fi
+
+    rustup toolchain install stable --profile minimal
+
+    updated_rustc_version=$(rustc_version)
+    if [ -z "$updated_rustc_version" ] || ! version_gte "$updated_rustc_version" "$MIN_RUST_VERSION"; then
+        echo "clawpi: failed to provision a new enough Rust toolchain (need $MIN_RUST_VERSION+)." >&2
+        exit 1
+    fi
+}
 
 ensure_runtime_packages() {
     if [ "$ROOT_DIR" != "/" ] || [ "$(uname -s)" != "Linux" ]; then
@@ -17,7 +107,7 @@ ensure_runtime_packages() {
     fi
 
     missing_packages=
-    for package in hostapd dnsmasq avahi-daemon; do
+    for package in hostapd dnsmasq avahi-daemon build-essential pkg-config cmake curl ca-certificates; do
         if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
             missing_packages="${missing_packages} ${package}"
         fi
@@ -74,6 +164,7 @@ if [ "$ROOT_DIR" = "/" ] && [ "$(uname -s)" != "Linux" ]; then
 fi
 
 ensure_runtime_packages
+ensure_build_toolchain
 
 cd "$REPO_ROOT"
 cargo build --release

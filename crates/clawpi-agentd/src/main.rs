@@ -344,6 +344,12 @@ mod tests {
         std::env::temp_dir().join(format!("clawpi-agentd-test-{unique}"))
     }
 
+    fn cleanup_root(root: PathBuf) {
+        if let Err(err) = fs::remove_dir_all(root) {
+            assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        }
+    }
+
     #[test]
     fn build_zeroclaw_config_sets_unrestricted_runtime_profile() {
         let root = temp_root();
@@ -383,7 +389,7 @@ mod tests {
             serde_json::Value::Bool(false)
         );
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_root(root);
     }
 
     #[test]
@@ -402,7 +408,7 @@ mod tests {
         assert!(identity.contains("Product: ClawPi"));
         assert!(bootstrap.contains("ZeroClaw-backed runtime"));
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_root(root);
     }
 
     #[test]
@@ -427,6 +433,6 @@ mod tests {
             serde_json::Value::String(String::from("anthropic/claude-sonnet-4.6"))
         );
 
-        fs::remove_dir_all(root).unwrap();
+        cleanup_root(root);
     }
 }

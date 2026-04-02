@@ -111,7 +111,9 @@ Work in progress.
 
 The current practical path is `scripts/install_dev_on_pi.sh`, which installs
 the early ClawPi binaries and systemd units onto the DietPi-based proving-ground
-CM5 while the flashable image path is still taking shape.
+CM5 while the flashable image path is still taking shape. That installer now
+also bootstraps a newer Rust toolchain on the device when the distro compiler
+is too old for the embedded ZeroClaw runtime.
 
 The repo now also includes an initial custom `pi-gen` stage template under
 `image/pi-gen/stage-clawpi`, and `scripts/build_image.sh` can assemble the

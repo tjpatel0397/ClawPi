@@ -92,6 +92,7 @@ The repo now includes:
 - a proving-ground `clawpi.local` flow that is now functional end-to-end as a setup-first handoff instead of a dense management page
 - a first local `clawpi-agentd` service that moves prompt execution behind a Unix-socket runtime boundary under `/run/clawpi`
 - a minimal normal-mode runtime pair where `clawpi-sessiond` writes heartbeat state and `clawpi-agentd` now wraps upstream ZeroClaw as the proving-ground local agent runtime
+- a Pi install script that now bootstraps a newer Rust toolchain on-device when the distro `rustc` is too old for the embedded ZeroClaw runtime
 - a recovery handoff that redirects the device back into setup mode
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout
 - a small `scripts/install_pi_gen_deps.sh` helper for preparing a Debian build host
