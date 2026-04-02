@@ -204,6 +204,14 @@ fn print_status() -> ExitCode {
                         lookup_field(&content, "status").unwrap_or("unknown")
                     );
                     println!(
+                        "agent_engine={}",
+                        lookup_field(&content, "engine").unwrap_or("unknown")
+                    );
+                    println!(
+                        "agent_engine_rev={}",
+                        lookup_field(&content, "engine_rev").unwrap_or("unknown")
+                    );
+                    println!(
                         "agent_socket={}",
                         lookup_field(&content, "socket").unwrap_or("unknown")
                     );

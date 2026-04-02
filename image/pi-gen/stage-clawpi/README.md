@@ -11,6 +11,7 @@ It is intentionally narrow:
 - install the runtime packages needed for captive-style setup networking
 - install the runtime package needed for `.local` browser discovery in normal mode
 - install the first local Claw agent/runtime pair so AI credentials and simple prompts can be handled on-device after Wi-Fi onboarding
+- wire `clawpi-agentd` to the reused upstream ZeroClaw runtime for on-device prompt execution
 - seed `/etc/clawpi/config.toml` into pending setup mode
 - mask distro-managed `hostapd` and `dnsmasq` units so ClawPi owns setup mode
 - enable `clawpi-mode.service` for first boot

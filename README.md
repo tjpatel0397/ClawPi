@@ -91,7 +91,7 @@ The repo now includes:
 - a small browser-based local console that starts with AI setup and then turns into a focused prompt surface for talking to the device
 - a proving-ground `clawpi.local` flow that is now functional end-to-end as a setup-first handoff instead of a dense management page
 - a first local `clawpi-agentd` service that moves prompt execution behind a Unix-socket runtime boundary under `/run/clawpi`
-- a minimal normal-mode runtime pair where `clawpi-sessiond` writes heartbeat state and `clawpi-agentd` owns prompt handling
+- a minimal normal-mode runtime pair where `clawpi-sessiond` writes heartbeat state and `clawpi-agentd` now wraps upstream ZeroClaw as the proving-ground local agent runtime
 - a recovery handoff that redirects the device back into setup mode
 - an initial custom `pi-gen` stage path that `scripts/build_image.sh` can sync into a real `pi-gen` checkout
 - a small `scripts/install_pi_gen_deps.sh` helper for preparing a Debian build host
@@ -107,4 +107,6 @@ the operating system. ClawPi should wrap that runtime in OS-owned boot, setup,
 recovery, ownership, and device integration, while still leaving room to drift
 the usual ZeroClaw UX toward something that feels more native on a dedicated
 device. The current `clawpi.local` console is only the proving-ground front end
-for that deeper system integration, not the final architecture.
+for that deeper system integration, not the final architecture. In the current
+proving ground, `clawpi-agentd` now delegates prompt execution into upstream
+ZeroClaw instead of running a ClawPi-owned OpenAI tool loop directly.
