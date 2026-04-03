@@ -60,6 +60,28 @@ The current CM5 device running DietPi is a proving ground, not the final product
 
 The end goal is still a real flashable ClawPi OS image.
 
+## Current handoff state (2026-04-03)
+
+The current proving-ground runtime now has a real local boundary:
+
+- `clawpi-agentd` owns prompt execution behind a Unix socket under `/run/clawpi`
+- `clawpi-agentd` currently reuses upstream ZeroClaw as the embedded proving-ground runtime
+- `clawpi-webd` is the browser front end at `http://<device-name>.local/`
+- the setup contract now supports provider-specific auth instead of assuming an OpenAI-only API key flow
+
+The current `clawpi.local` browser flow is not considered done.
+
+The latest rewrite moved the page toward a provider-first setup flow with a
+simpler prompt surface, but the UI is still too busy visually and the
+browser-side interactions are still buggy.
+
+If a new thread picks up here, the immediate priority should be:
+
+- simplify the `clawpi.local` UI/UX further
+- fix the provider/auth/model picker bugs in `crates/clawpi-webd/src/main.rs`
+- keep the device menu minimal
+- avoid adding more browser features until the current setup and console flow feels solid
+
 ## Working rules
 
 ### 1. Keep the project OS-first

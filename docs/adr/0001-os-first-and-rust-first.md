@@ -103,3 +103,8 @@ The current DietPi install on the CM5 is a proving ground for development.
 It is not the final product.
 
 The final product is still meant to be a flashable ClawPi operating system image.
+
+As of 2026-04-03, this ADR still stands unchanged. The current proving-ground
+implementation now has a better OS-owned runtime split, but the `clawpi.local`
+browser handoff still needs simplification and bug fixing. That work should be
+treated as an OS onboarding problem, not as a generic dashboard feature.

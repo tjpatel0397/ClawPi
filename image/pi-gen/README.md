@@ -151,3 +151,9 @@ the `arm64` branch for those hosts before running `scripts/build_image.sh`.
 The proving-ground CM5 can now complete the arm64 image build with this stage.
 The next step is flashing that image onto the CM5 eMMC and validating the
 cordless first-boot onboarding path.
+
+As of 2026-04-03, that onboarding/runtime handoff is architecturally in the
+right shape but not visually finished. The current `clawpi.local` flow is still
+too busy and still buggy, so the next thread should treat the browser surface
+as an unfinished proving-ground UI even though the runtime wiring is now in
+place.

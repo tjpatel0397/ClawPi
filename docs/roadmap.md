@@ -215,3 +215,25 @@ Later phases may include things like:
 The important thing is not to build these too early.
 
 The important thing is to keep building in the right order.
+
+## Handoff note (2026-04-03)
+
+The current next step is not adding more browser features.
+
+The current next step is fixing and simplifying `clawpi.local`.
+
+Right now the proving-ground browser flow has the right broad direction:
+
+- provider-first AI setup
+- provider-specific auth handling
+- a simple prompt surface after setup
+- a local `clawpi-agentd` boundary that wraps upstream ZeroClaw
+
+But the latest UI rewrite is still too visually busy and still buggy.
+
+If a new thread continues from here, it should first:
+
+- simplify the setup UI further
+- fix the provider/auth/model picker logic in `crates/clawpi-webd/src/main.rs`
+- make the setup-to-console transition feel obvious and low-cognitive-load
+- hold off on broader browser-side expansion until that surface is solid

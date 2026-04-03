@@ -111,3 +111,23 @@ device. The current `clawpi.local` console is only the proving-ground front end
 for that deeper system integration, not the final architecture. In the current
 proving ground, `clawpi-agentd` now delegates prompt execution into upstream
 ZeroClaw instead of running a ClawPi-owned OpenAI tool loop directly.
+
+## Handoff note (2026-04-03)
+
+The current proving-ground browser flow is now architecturally closer to the
+right direction:
+
+- Wi-Fi onboarding can hand off into `http://<device-name>.local/`
+- the local page now starts with AI setup and then transitions into a simple prompt surface
+- provider selection is now meant to be provider-first and provider-specific instead of OpenAI-only
+- `clawpi-agentd` is the local runtime boundary and currently wraps upstream ZeroClaw
+
+But the current browser experience is still not acceptable as product UX.
+
+The latest `clawpi.local` rewrite is still too visually busy and still buggy.
+The next thread should treat the UI as unfinished and focus first on:
+
+- simplifying the setup screen further
+- fixing the provider/auth/model picker interactions in `crates/clawpi-webd/src/main.rs`
+- keeping the top-right device menu minimal
+- making the setup-to-console handoff feel calm and obvious before adding more surface area

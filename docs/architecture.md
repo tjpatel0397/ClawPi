@@ -283,3 +283,21 @@ Examples of places where non-Rust files still make sense:
 The real goal is not “Rust everywhere.”
 
 The real goal is “a clean, efficient, durable system.”
+
+## Handoff note (2026-04-03)
+
+The proving-ground architecture now has the intended local runtime split:
+
+- `clawpi-webd` is the browser-facing setup and console surface
+- `clawpi-agentd` is the local agent boundary
+- `clawpi-agentd` currently reuses upstream ZeroClaw for prompt execution and tool use
+- `/etc/clawpi/config.toml` now carries provider-specific AI setup instead of assuming an OpenAI-only contract
+
+That architectural direction is good enough to keep.
+
+The current problem is the browser surface, not the runtime boundary.
+
+The latest `clawpi.local` rewrite is still too visually dense and still buggy in
+its provider/auth/model flow. The next thread should prioritize simplifying and
+stabilizing `crates/clawpi-webd/src/main.rs` before expanding more browser-side
+behavior.

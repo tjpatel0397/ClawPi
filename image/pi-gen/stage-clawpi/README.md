@@ -20,3 +20,8 @@ The generated payload for this stage is assembled by `scripts/build_image.sh`.
 
 That keeps the image path aligned with the proving-ground install path instead of
 creating a second installation story just for image builds.
+
+As of 2026-04-03, this stage carries the current provider-first `clawpi.local`
+handoff, but that UI is still under active revision. The runtime split is now
+the important proven part; the browser experience still needs simplification
+and bug fixing.

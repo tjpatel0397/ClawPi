@@ -531,45 +531,50 @@ impl PortalRuntime {
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
   <title>ClawPi Setup</title>\
   <style>\
-    :root {{ color-scheme: light; font-family: ui-sans-serif, system-ui, sans-serif; }}\
-    body {{ margin: 0; background: linear-gradient(160deg, #f3efe4, #d9efe3); color: #14211c; }}\
-    main {{ max-width: 34rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; }}\
-    h1 {{ margin-bottom: 0.4rem; font-size: 2rem; }}\
-    p {{ line-height: 1.5; }}\
-    form {{ margin-top: 1.5rem; padding: 1.25rem; background: rgba(255,255,255,0.82); border-radius: 1rem; box-shadow: 0 0.5rem 2rem rgba(20,33,28,0.08); }}\
-    label {{ display: block; margin-top: 1rem; font-weight: 600; }}\
-    input {{ width: 100%; box-sizing: border-box; margin-top: 0.35rem; padding: 0.85rem 0.9rem; border: 1px solid #b7cbbf; border-radius: 0.8rem; font: inherit; }}\
-    button {{ width: 100%; margin-top: 1.25rem; padding: 0.95rem 1rem; border: 0; border-radius: 999px; background: #184f37; color: #fff; font: inherit; font-weight: 700; }}\
-    .meta {{ margin-top: 1rem; padding: 0.9rem 1rem; border-radius: 0.8rem; background: rgba(20,33,28,0.07); }}\
-    .notice {{ margin-top: 1rem; padding: 0.9rem 1rem; border-radius: 0.8rem; }}\
-    .notice-error {{ background: #ffe3dc; color: #7a2410; }}\
+    :root {{ color-scheme: dark; }}\
+    * {{ box-sizing: border-box; }}\
+    body {{ margin: 0; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.6; }}\
+    main {{ max-width: 32rem; margin: 0 auto; padding: 2rem 1.25rem; }}\
+    .prompt {{ color: #3fb950; margin-bottom: 1.5rem; }}\
+    .hint {{ color: #8b949e; font-size: 13px; margin-bottom: 1.5rem; }}\
+    .error {{ color: #f85149; background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); padding: 0.6rem 0.8rem; margin-bottom: 1rem; }}\
+    form {{ display: grid; gap: 1rem; }}\
+    label {{ color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}\
+    .field {{ display: grid; gap: 0.3rem; }}\
+    input {{ width: 100%; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; padding: 0.6rem 0.75rem; font: inherit; }}\
+    input:focus {{ outline: none; border-color: #3fb950; }}\
+    button {{ margin-top: 0.5rem; padding: 0.6rem 1rem; background: #3fb950; color: #0d1117; border: none; font: inherit; font-weight: 600; cursor: pointer; }}\
+    button:hover {{ background: #2ea043; }}\
   </style>\
 </head>\
 <body>\
   <main>\
-    <h1>ClawPi Setup</h1>\
-    <p>Finish first boot from your phone. ClawPi is broadcasting <strong>{setup_ssid}</strong>. If this page did not open automatically, visit <strong>{portal_url}</strong>.</p>\
-    <div class=\"meta\">\
-      <strong>What happens next</strong><br>\
-      ClawPi will leave this setup network, join your home Wi-Fi, and continue booting. If the setup network comes back after a short pause, check the password and try again.\
-    </div>\
+    <div class=\"prompt\">&gt; clawpi setup</div>\
+    <div class=\"hint\">Broadcasting {setup_ssid}. Enter your home Wi-Fi to continue.</div>\
     {error_html}\
     <form method=\"post\" action=\"/configure\">\
-      <label for=\"ssid\">Home Wi-Fi name</label>\
-      <input id=\"ssid\" name=\"ssid\" autocomplete=\"ssid\" value=\"{wifi_ssid}\" required>\
-      <label for=\"passphrase\">Home Wi-Fi password</label>\
-      <input id=\"passphrase\" name=\"passphrase\" type=\"password\" autocomplete=\"current-password\" minlength=\"8\" maxlength=\"63\" required>\
-      <label for=\"device_name\">Device name</label>\
-      <input id=\"device_name\" name=\"device_name\" value=\"{device_name}\" placeholder=\"clawpi-cm5\">\
-      <label for=\"country\">Wi-Fi country code</label>\
-      <input id=\"country\" name=\"country\" value=\"{wifi_country}\" maxlength=\"2\" placeholder=\"US\">\
-      <button type=\"submit\">Connect ClawPi</button>\
+      <div class=\"field\">\
+        <label for=\"ssid\">Wi-Fi name</label>\
+        <input id=\"ssid\" name=\"ssid\" autocomplete=\"ssid\" value=\"{wifi_ssid}\" required autofocus>\
+      </div>\
+      <div class=\"field\">\
+        <label for=\"passphrase\">Wi-Fi password</label>\
+        <input id=\"passphrase\" name=\"passphrase\" type=\"password\" autocomplete=\"current-password\" minlength=\"8\" maxlength=\"63\" required>\
+      </div>\
+      <div class=\"field\">\
+        <label for=\"device_name\">Device name</label>\
+        <input id=\"device_name\" name=\"device_name\" value=\"{device_name}\" placeholder=\"clawpi\">\
+      </div>\
+      <div class=\"field\">\
+        <label for=\"country\">Country code</label>\
+        <input id=\"country\" name=\"country\" value=\"{wifi_country}\" maxlength=\"2\" placeholder=\"US\">\
+      </div>\
+      <button type=\"submit\">Connect</button>\
     </form>\
   </main>\
 </body>\
 </html>",
             setup_ssid = escape_html(&self.setup_ssid),
-            portal_url = escape_html(AP_PORTAL_URL),
             wifi_ssid = escape_html(&defaults.wifi_ssid),
             device_name = escape_html(&defaults.device_name),
             wifi_country = escape_html(&defaults.wifi_country),
@@ -587,23 +592,20 @@ impl PortalRuntime {
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
   <title>ClawPi Connecting</title>\
   <style>\
-    body {{ margin: 0; background: #14211c; color: #f5f3ea; font-family: ui-sans-serif, system-ui, sans-serif; }}\
-    main {{ max-width: 32rem; margin: 0 auto; padding: 3rem 1.25rem; }}\
-    h1 {{ font-size: 2rem; margin-bottom: 0.5rem; }}\
-    p {{ line-height: 1.6; }}\
-    .meta {{ margin-top: 1rem; padding: 0.9rem 1rem; border-radius: 0.8rem; background: rgba(255,255,255,0.08); }}\
-    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}\
+    :root {{ color-scheme: dark; }}\
+    body {{ margin: 0; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.6; }}\
+    main {{ max-width: 32rem; margin: 0 auto; padding: 2rem 1.25rem; }}\
+    .prompt {{ color: #3fb950; margin-bottom: 1.5rem; }}\
+    .line {{ color: #8b949e; margin-bottom: 0.5rem; }}\
+    .url {{ color: #c9d1d9; }}\
   </style>\
 </head>\
 <body>\
   <main>\
-    <h1>ClawPi is switching networks</h1>\
-    <p>This setup network will disappear while ClawPi joins your home Wi-Fi.</p>\
-    <div class=\"meta\">\
-      <strong>Next browser step</strong><br>\
-      Keep this page open. Once ClawPi is online, it will try to reopen at <code>{local_url}</code>.\
-    </div>\
-    <p>If the <strong>{setup_ssid}</strong> network comes back after a short pause, rejoin it and check the password you entered.</p>\
+    <div class=\"prompt\">&gt; clawpi connect</div>\
+    <div class=\"line\">Switching to home Wi-Fi...</div>\
+    <div class=\"line\">This page will redirect to <span class=\"url\">{local_url}</span> when ready.</div>\
+    <div class=\"line\">If {setup_ssid} reappears, rejoin it and check your password.</div>\
     <script>\
       const targetUrl = {target_url};\
       const healthUrl = targetUrl + 'health';\
@@ -619,7 +621,7 @@ impl PortalRuntime {
         }}\
       }}\
       window.setTimeout(waitForClawPi, 3000);\
-            </script>\
+    </script>\
   </main>\
 </body>\
 </html>",

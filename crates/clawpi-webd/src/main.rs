@@ -643,28 +643,19 @@ fn render_setup_view(
     notice_html: &str,
     error_html: &str,
 ) -> String {
-    let ai_form = render_ai_form(config, "setup-ai", "Continue", "setup", true);
-    let device_menu = render_device_menu(config, wifi_ssid);
+    let ai_form = render_ai_form(config, "setup-ai", "Continue", "setup");
 
     format!(
-        "<section class=\"page-shell\">\
-           <header class=\"page-topbar\">\
-             <div class=\"wordmark\">ClawPi</div>\
-             {device_menu}\
-           </header>\
-           <div class=\"setup-wrap\">\
-             {notice_html}\
-             {error_html}\
-             <section class=\"setup-card\">\
-               <h1>Pick an AI provider</h1>\
-               {ai_form}\
-             </section>\
-           </div>\
-         </section>",
-        device_menu = device_menu,
+        "<div class=\"prompt\">&gt; clawpi setup — ai</div>\
+         <div class=\"hint\">Configure an AI provider to continue.</div>\
+         {notice_html}\
+         {error_html}\
+         {ai_form}\
+         {device_info}",
         notice_html = notice_html,
         error_html = error_html,
         ai_form = ai_form,
+        device_info = render_device_info(config, wifi_ssid),
     )
 }
 
@@ -677,41 +668,31 @@ fn render_chat_view(
     last_prompt: Option<&str>,
     answer: Option<&str>,
 ) -> String {
-    let ai_form = render_ai_form(config, "console-ai", "Save", "update", false);
+    let ai_form = render_ai_form(config, "console-ai", "Save", "update");
     let transcript_html = render_transcript(last_prompt, answer);
-    let device_menu = render_device_menu(config, wifi_ssid);
 
     format!(
-        "<section class=\"page-shell\">\
-           <header class=\"page-topbar\">\
-             <div class=\"wordmark\">ClawPi</div>\
-             {device_menu}\
-           </header>\
-           <div class=\"console-wrap\">\
-             {notice_html}\
-             {error_html}\
-             <section class=\"console-card\">\
-               <div class=\"transcript\">{transcript_html}</div>\
-               <form method=\"post\" action=\"/prompt\" class=\"composer\">\
-                 <label class=\"visually-hidden\" for=\"prompt\">Message Claw</label>\
-                 <textarea id=\"prompt\" name=\"prompt\" rows=\"4\" class=\"composer-box\" placeholder=\"Ask Claw anything.\" autofocus>{draft_prompt}</textarea>\
-                 <div class=\"composer-row\">\
-                   <button type=\"submit\">Send</button>\
-                 </div>\
-               </form>\
-               <details class=\"settings-drawer\">\
-                 <summary>AI</summary>\
-                 {ai_form}\
-               </details>\
-             </section>\
+        "<div class=\"prompt\">&gt; clawpi</div>\
+         {notice_html}\
+         {error_html}\
+         <div class=\"transcript\">{transcript_html}</div>\
+         <form method=\"post\" action=\"/prompt\" class=\"composer\">\
+           <textarea id=\"prompt\" name=\"prompt\" rows=\"3\" placeholder=\"Ask Claw anything...\" autofocus>{draft_prompt}</textarea>\
+           <div class=\"composer-row\">\
+             <button type=\"submit\">Send</button>\
            </div>\
-         </section>",
-        device_menu = device_menu,
+         </form>\
+         <details class=\"settings\">\
+           <summary>&gt; settings</summary>\
+           {ai_form}\
+         </details>\
+         {device_info}",
         notice_html = notice_html,
         error_html = error_html,
         ai_form = ai_form,
         transcript_html = transcript_html,
         draft_prompt = escape_html(draft_prompt.unwrap_or("")),
+        device_info = render_device_info(config, wifi_ssid),
     )
 }
 
@@ -720,22 +701,7 @@ fn render_ai_form(
     form_id: &str,
     submit_label: &str,
     form_mode: &str,
-    autofocus_provider: bool,
 ) -> String {
-    let provider_label = config
-        .ai_provider
-        .as_deref()
-        .and_then(find_provider_preset)
-        .map(|preset| preset.label)
-        .unwrap_or("Select provider");
-    let model_label = config
-        .ai_provider
-        .as_deref()
-        .zip(config.ai_model.as_deref())
-        .and_then(|(provider, model)| model_label_for(provider, model))
-        .unwrap_or("Select model");
-    let provider_autofocus = if autofocus_provider { " autofocus" } else { "" };
-    let provider_options = render_provider_picker_options();
     let initial_provider = config.ai_provider.as_deref().unwrap_or("");
     let initial_model = config.ai_model.as_deref().unwrap_or("");
     let initial_has_secret = config
@@ -749,58 +715,36 @@ fn render_ai_form(
         "sk-..."
     };
 
+    let provider_options_html = render_provider_select_options(initial_provider);
+
     format!(
-        "<form method=\"post\" action=\"/configure-ai\" class=\"ai-config-form\" data-form-mode=\"{form_mode}\" data-initial-provider=\"{initial_provider}\" data-initial-model=\"{initial_model}\" data-initial-has-secret=\"{initial_has_secret}\">\
-           <input type=\"hidden\" name=\"provider_preset\" value=\"\">\
-           <input type=\"hidden\" name=\"provider_value\" value=\"\">\
+        "<form method=\"post\" action=\"/configure-ai\" class=\"ai-config-form form-stack\" data-form-mode=\"{form_mode}\" data-initial-provider=\"{initial_provider}\" data-initial-model=\"{initial_model}\" data-initial-has-secret=\"{initial_has_secret}\">\
            <input type=\"hidden\" name=\"auth_mode\" value=\"\">\
-           <input type=\"hidden\" name=\"model\" value=\"\">\
-           <div class=\"flow-stack\">\
-             <button type=\"button\" class=\"select-card\" data-open-picker=\"provider\"{provider_autofocus}>\
-               <span class=\"field-kicker\">Provider</span>\
-               <strong data-provider-label>{provider_label}</strong>\
-             </button>\
-             <div class=\"field-shell is-hidden\" data-field=\"route\">\
-               <label for=\"{form_id}-provider-custom\">Provider route</label>\
-               <input id=\"{form_id}-provider-custom\" name=\"provider_custom\" value=\"{initial_provider}\" placeholder=\"custom:https://your-endpoint/v1\" spellcheck=\"false\" autocapitalize=\"off\">\
-             </div>\
-             <div class=\"field-shell is-hidden\" data-field=\"auth\">\
-               <div class=\"choice-strip\" data-auth-options></div>\
-             </div>\
-             <div class=\"field-shell is-hidden\" data-field=\"credential\">\
-               <label for=\"{form_id}-api-key\" data-credential-label>API key</label>\
-               <input id=\"{form_id}-api-key\" name=\"api_key\" type=\"password\" placeholder=\"{api_key_placeholder}\" autocomplete=\"off\" spellcheck=\"false\">\
-             </div>\
-             <button type=\"button\" class=\"select-card is-hidden\" data-field=\"model\" data-open-picker=\"model\">\
-               <span class=\"field-kicker\">Model</span>\
-               <strong data-model-label>{model_label}</strong>\
-             </button>\
-             <div class=\"field-shell is-hidden\" data-field=\"custom-model\">\
-               <label for=\"{form_id}-model-custom\">Custom model</label>\
-               <input id=\"{form_id}-model-custom\" name=\"model_custom\" value=\"{initial_model}\" placeholder=\"model-id\" spellcheck=\"false\" autocapitalize=\"off\">\
-             </div>\
+           <div class=\"field\">\
+             <label for=\"{form_id}-provider\">Provider</label>\
+             <select id=\"{form_id}-provider\" name=\"provider_value\" data-provider-select>\
+               {provider_options_html}\
+             </select>\
            </div>\
-           <div class=\"picker-sheet is-hidden\" data-picker=\"provider\">\
-             <div class=\"picker-panel\">\
-               <div class=\"picker-head\">\
-                 <span>Pick a provider</span>\
-                 <button type=\"button\" class=\"picker-close\" data-close-picker aria-label=\"Close\">Close</button>\
-               </div>\
-               <input type=\"search\" class=\"picker-search\" data-picker-search placeholder=\"Search providers\">\
-               <div class=\"picker-list\" data-picker-list>\
-                 {provider_options}\
-               </div>\
-             </div>\
+           <div class=\"field is-hidden\" data-field=\"route\">\
+             <label for=\"{form_id}-provider-custom\">Provider route</label>\
+             <input id=\"{form_id}-provider-custom\" name=\"provider_custom\" value=\"{initial_provider}\" placeholder=\"custom:https://your-endpoint/v1\" spellcheck=\"false\" autocapitalize=\"off\">\
            </div>\
-           <div class=\"picker-sheet is-hidden\" data-picker=\"model\">\
-             <div class=\"picker-panel\">\
-               <div class=\"picker-head\">\
-                 <span>Pick a model</span>\
-                 <button type=\"button\" class=\"picker-close\" data-close-picker aria-label=\"Close\">Close</button>\
-               </div>\
-               <input type=\"search\" class=\"picker-search\" data-model-search placeholder=\"Search models\">\
-               <div class=\"picker-list\" data-model-options></div>\
-             </div>\
+           <div class=\"field is-hidden\" data-field=\"auth\">\
+             <label for=\"{form_id}-auth\">Auth method</label>\
+             <select id=\"{form_id}-auth\" data-auth-select></select>\
+           </div>\
+           <div class=\"field is-hidden\" data-field=\"credential\">\
+             <label for=\"{form_id}-api-key\" data-credential-label>API key</label>\
+             <input id=\"{form_id}-api-key\" name=\"api_key\" type=\"password\" placeholder=\"{api_key_placeholder}\" autocomplete=\"off\" spellcheck=\"false\">\
+           </div>\
+           <div class=\"field is-hidden\" data-field=\"model\">\
+             <label for=\"{form_id}-model\">Model</label>\
+             <select id=\"{form_id}-model\" name=\"model\" data-model-select></select>\
+           </div>\
+           <div class=\"field is-hidden\" data-field=\"custom-model\">\
+             <label for=\"{form_id}-model-custom\">Custom model ID</label>\
+             <input id=\"{form_id}-model-custom\" name=\"model_custom\" value=\"{initial_model}\" placeholder=\"model-id\" spellcheck=\"false\" autocapitalize=\"off\">\
            </div>\
            <button type=\"submit\">{submit_label}</button>\
          </form>",
@@ -808,12 +752,9 @@ fn render_ai_form(
         initial_provider = escape_html(initial_provider),
         initial_model = escape_html(initial_model),
         initial_has_secret = if initial_has_secret { "true" } else { "false" },
-        provider_autofocus = provider_autofocus,
-        provider_label = escape_html(provider_label),
         form_id = escape_html(form_id),
         api_key_placeholder = escape_html(api_key_placeholder),
-        model_label = escape_html(model_label),
-        provider_options = provider_options,
+        provider_options_html = provider_options_html,
         submit_label = escape_html(submit_label),
     )
 }
@@ -821,61 +762,45 @@ fn render_ai_form(
 fn render_transcript(last_prompt: Option<&str>, answer: Option<&str>) -> String {
     match (last_prompt, answer) {
         (Some(prompt), Some(answer)) => format!(
-            "<article class=\"message message-user\">\
-               <span class=\"message-label\">You</span>\
-               {prompt}\
-             </article>\
-             <article class=\"message message-assistant\">\
-               <span class=\"message-label\">Claw</span>\
-               {answer}\
-             </article>",
+            "<div class=\"msg msg-user\"><span class=\"msg-prefix\">you&gt;</span> {prompt}</div>\
+             <div class=\"msg msg-claw\"><span class=\"msg-prefix\">claw&gt;</span> {answer}</div>",
             prompt = escape_html(prompt),
             answer = escape_html(answer),
         ),
         (Some(prompt), None) => format!(
-            "<article class=\"message message-user\">\
-               <span class=\"message-label\">You</span>\
-               {prompt}\
-             </article>",
+            "<div class=\"msg msg-user\"><span class=\"msg-prefix\">you&gt;</span> {prompt}</div>",
             prompt = escape_html(prompt),
         ),
         (None, _) => String::from(
-            "<article class=\"message message-assistant message-empty\">\
-               <span class=\"message-label\">Claw</span>\
-               Ask Claw anything.\
-             </article>",
+            "<div class=\"msg msg-empty\">No messages yet.</div>",
         ),
     }
 }
 
-fn render_device_menu(config: &ClawPiConfig, wifi_ssid: &str) -> String {
+fn render_device_info(config: &ClawPiConfig, wifi_ssid: &str) -> String {
     format!(
-        "<details class=\"device-menu\">\
-           <summary>Device</summary>\
-           <div class=\"device-popover\">\
-             <div class=\"device-row\"><span>Name</span><strong>{device_name}</strong></div>\
-             <div class=\"device-row\"><span>Wi-Fi</span><strong>{wifi_ssid}</strong></div>\
-           </div>\
-         </details>",
+        "<div class=\"device-info\">{device_name} · {wifi_ssid}</div>",
         device_name = escape_html(&config.device_name),
         wifi_ssid = escape_html(wifi_ssid),
     )
 }
 
-fn render_provider_picker_options() -> String {
-    PROVIDER_PRESETS
-        .iter()
-        .map(|preset| {
-            format!(
-                "<button type=\"button\" class=\"picker-option\" data-provider-id=\"{id}\" data-searchable=\"{searchable}\">\
-                   <strong>{label}</strong>\
-                 </button>",
-                id = preset.id,
-                searchable = escape_html(&format!("{} {}", preset.label, preset.hint)),
-                label = escape_html(preset.label),
-            )
-        })
-        .collect()
+fn render_provider_select_options(selected: &str) -> String {
+    let mut html = String::from("<option value=\"\">-- select --</option>");
+    for preset in PROVIDER_PRESETS {
+        let sel = if selected.eq_ignore_ascii_case(preset.id) {
+            " selected"
+        } else {
+            ""
+        };
+        html.push_str(&format!(
+            "<option value=\"{id}\"{sel}>{label}</option>",
+            id = preset.id,
+            sel = sel,
+            label = escape_html(preset.label),
+        ));
+    }
+    html
 }
 
 fn resolve_provider(fields: &HashMap<String, String>) -> String {
@@ -900,10 +825,20 @@ fn resolve_provider(fields: &HashMap<String, String>) -> String {
 }
 
 fn resolve_model(fields: &HashMap<String, String>) -> Option<String> {
-    fields
+    let model = fields
         .get("model")
         .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty());
+
+    if model == Some(MODEL_CUSTOM_ID) {
+        return fields
+            .get("model_custom")
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(String::from);
+    }
+
+    model
         .or_else(|| {
             fields
                 .get("model_custom")
@@ -975,22 +910,6 @@ fn resolve_ai_secret(
         )
 }
 
-fn find_provider_preset(provider: &str) -> Option<&'static UiProviderPreset> {
-    let normalized = provider.trim();
-    PROVIDER_PRESETS
-        .iter()
-        .find(|preset| normalized.eq_ignore_ascii_case(preset.id))
-}
-
-fn model_label_for(provider: &str, model: &str) -> Option<&'static str> {
-    let preset = find_provider_preset(provider)?;
-    preset
-        .models
-        .iter()
-        .find(|option| option.id == model)
-        .map(|option| option.label)
-}
-
 fn render_provider_catalog_json() -> String {
     serde_json::to_string(PROVIDER_PRESETS)
         .unwrap_or_else(|_| String::from("[]"))
@@ -1008,259 +927,38 @@ fn render_document(device_name: &str, body_html: &str) -> String {
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
   <title>{device_name} · ClawPi</title>\
   <style>\
-    :root {{\
-      color-scheme: light;\
-      --bg-0: #f3ead7;\
-      --bg-1: #dfe8db;\
-      --ink: #17211c;\
-      --muted: #536159;\
-      --line: rgba(23, 33, 28, 0.11);\
-      --surface: rgba(248, 244, 236, 0.74);\
-      --surface-strong: rgba(255, 255, 255, 0.88);\
-      --chip: rgba(23, 33, 28, 0.06);\
-      --accent: #1f5b42;\
-      --accent-strong: #163d2d;\
-      font-family: \"Sohne\", \"IBM Plex Sans\", \"Avenir Next\", \"Segoe UI Variable\", sans-serif;\
-    }}\
+    :root {{ color-scheme: dark; }}\
     * {{ box-sizing: border-box; }}\
-    body {{\
-      margin: 0;\
-      min-height: 100vh;\
-      color: var(--ink);\
-      background: radial-gradient(circle at top left, rgba(255, 241, 213, 0.92), transparent 32%), radial-gradient(circle at top right, rgba(202, 228, 210, 0.88), transparent 36%), linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);\
-    }}\
-    body::before {{\
-      content: \"\";\
-      position: fixed;\
-      inset: 0;\
-      pointer-events: none;\
-      background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0)), repeating-linear-gradient(135deg, rgba(23,33,28,0.03) 0, rgba(23,33,28,0.03) 1px, transparent 1px, transparent 14px);\
-      opacity: 0.45;\
-    }}\
-    main {{\
-      position: relative;\
-      min-height: 100vh;\
-      max-width: 56rem;\
-      margin: 0 auto;\
-      padding: 1rem;\
-      display: grid;\
-    }}\
-    h1 {{ margin: 0; font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1; letter-spacing: -0.05em; }}\
-    p {{ margin: 0; line-height: 1.5; }}\
-    strong {{ font-weight: 700; }}\
-    .page-shell {{ display: grid; gap: 1rem; align-content: start; }}\
-    .page-topbar {{ display: flex; justify-content: space-between; align-items: start; gap: 1rem; }}\
-    .wordmark {{ font-size: 1rem; font-weight: 700; letter-spacing: -0.03em; }}\
-    .setup-wrap {{ display: grid; gap: 0.9rem; min-height: calc(100vh - 5rem); align-content: center; }}\
-    .console-wrap {{ display: grid; gap: 0.9rem; }}\
-    .setup-card, .console-card {{\
-      border: 1px solid var(--line);\
-      border-radius: 1.6rem;\
-      background: var(--surface-strong);\
-      box-shadow: 0 1.5rem 4rem rgba(15, 23, 18, 0.12);\
-      padding: 1.1rem;\
-      backdrop-filter: blur(18px);\
-      animation: rise 0.32s ease;\
-    }}\
-    .setup-card {{ display: grid; gap: 1rem; max-width: 34rem; width: 100%; margin: 0 auto; }}\
-    .console-card {{ display: grid; gap: 1rem; }}\
-    label, .field-kicker {{\
-      display: block;\
-      font: 700 0.78rem/1 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
-      text-transform: uppercase;\
-      letter-spacing: 0.12em;\
-      color: var(--muted);\
-    }}\
-    input, select, textarea {{\
-      width: 100%;\
-      border: 1px solid #c3cfc3;\
-      border-radius: 1rem;\
-      background: rgba(255, 255, 255, 0.92);\
-      color: var(--ink);\
-      padding: 0.95rem 1rem;\
-      font: inherit;\
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);\
-    }}\
-    input:focus, select:focus, textarea:focus {{\
-      outline: 2px solid rgba(31, 91, 66, 0.18);\
-      outline-offset: 2px;\
-      border-color: rgba(31, 91, 66, 0.35);\
-    }}\
-    textarea {{ resize: vertical; min-height: 6rem; }}\
-    .flow-stack {{ display: grid; gap: 0.85rem; }}\
-    .field-shell {{ display: grid; gap: 0.55rem; }}\
-    .select-card {{\
-      width: 100%;\
-      display: flex;\
-      flex-direction: column;\
-      align-items: start;\
-      gap: 0.45rem;\
-      padding: 0.95rem 1rem;\
-      border-radius: 1rem;\
-      border: 1px solid #c3cfc3;\
-      background: rgba(255, 255, 255, 0.92);\
-      color: var(--ink);\
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);\
-      text-align: left;\
-    }}\
-    button {{\
-      border: 0;\
-      border-radius: 999px;\
-      background: var(--accent);\
-      color: #fff;\
-      padding: 0.98rem 1.2rem;\
-      font: inherit;\
-      font-weight: 700;\
-      cursor: pointer;\
-      transition: background 140ms ease, transform 140ms ease;\
-    }}\
-    button:hover {{ background: var(--accent-strong); transform: translateY(-1px); }}\
-    .notice {{ padding: 0.95rem 1rem; border-radius: 1rem; border: 1px solid transparent; }}\
-    .notice-ok {{ background: rgba(220, 243, 228, 0.95); color: #12482f; border-color: rgba(18, 72, 47, 0.12); }}\
-    .notice-error {{ background: rgba(255, 230, 220, 0.96); color: #7a2a19; border-color: rgba(122, 42, 25, 0.12); }}\
-    .choice-strip {{ display: flex; flex-wrap: wrap; gap: 0.55rem; }}\
-    .choice-pill {{\
-      background: rgba(23, 33, 28, 0.05);\
-      color: var(--ink);\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      padding: 0.78rem 0.95rem;\
-    }}\
-    .choice-pill.is-active {{ background: var(--accent); color: #fff; border-color: transparent; }}\
-    .settings-drawer {{\
-      border-radius: 1rem;\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      overflow: hidden;\
-      background: rgba(255, 255, 255, 0.45);\
-    }}\
-    .settings-drawer summary {{\
-      list-style: none;\
-      cursor: pointer;\
-      padding: 0.95rem 1rem;\
-      font-weight: 700;\
-    }}\
-    .settings-drawer summary::-webkit-details-marker {{ display: none; }}\
-    .settings-drawer[open] {{ padding-bottom: 1rem; }}\
-    .settings-drawer[open] summary {{ margin-bottom: 0.4rem; }}\
-    .transcript {{\
-      display: grid;\
-      gap: 0.85rem;\
-      min-height: 16rem;\
-      padding: 0.95rem;\
-      border-radius: 1.1rem;\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      background: rgba(23, 33, 28, 0.045);\
-    }}\
-    .message {{\
-      max-width: 44rem;\
-      padding: 0.95rem 1rem;\
-      border-radius: 1rem;\
-      line-height: 1.6;\
-      white-space: pre-wrap;\
-      overflow-wrap: anywhere;\
-    }}\
-    .message-user {{ margin-left: auto; background: #e4ede6; }}\
-    .message-assistant {{ background: #fff3d7; border: 1px solid rgba(125, 93, 26, 0.1); }}\
-    .message-empty {{ max-width: none; background: rgba(255, 255, 255, 0.82); border-style: dashed; }}\
-    .message-label {{\
-      display: block;\
-      margin-bottom: 0.4rem;\
-      font: 700 0.72rem/1 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
-      text-transform: uppercase;\
-      letter-spacing: 0.12em;\
-      color: var(--muted);\
-    }}\
-    .composer {{ display: grid; gap: 0.8rem; }}\
-    .composer-row {{ display: flex; justify-content: flex-end; gap: 1rem; align-items: center; }}\
-    .device-menu {{ position: relative; }}\
-    .device-menu summary {{\
-      list-style: none;\
-      cursor: pointer;\
-      padding: 0.68rem 0.92rem;\
-      border-radius: 999px;\
-      background: rgba(255, 255, 255, 0.82);\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      font: 700 0.78rem/1 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
-      color: var(--muted);\
-    }}\
-    .device-menu summary::-webkit-details-marker {{ display: none; }}\
-    .device-popover {{\
-      position: absolute;\
-      top: calc(100% + 0.6rem);\
-      right: 0;\
-      min-width: 14rem;\
-      display: grid;\
-      gap: 0.55rem;\
-      padding: 0.8rem;\
-      border-radius: 1rem;\
-      background: rgba(255, 255, 255, 0.96);\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      box-shadow: 0 1rem 2.6rem rgba(15, 23, 18, 0.16);\
-    }}\
-    .device-row {{ display: flex; justify-content: space-between; gap: 1rem; align-items: center; }}\
-    .device-row span {{ color: var(--muted); }}\
-    .device-row strong {{ font: 600 0.9rem/1.4 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace; text-align: right; }}\
-    .picker-sheet {{\
-      position: fixed;\
-      inset: 0;\
-      display: grid;\
-      place-items: center;\
-      padding: 1rem;\
-      background: rgba(23, 33, 28, 0.2);\
-      z-index: 10;\
-    }}\
-    .picker-panel {{\
-      width: min(32rem, 100%);\
-      max-height: min(70vh, 36rem);\
-      display: grid;\
-      gap: 0.8rem;\
-      padding: 1rem;\
-      border-radius: 1.2rem;\
-      background: rgba(255, 255, 255, 0.98);\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      box-shadow: 0 1.5rem 4rem rgba(15, 23, 18, 0.16);\
-    }}\
-    .picker-head {{ display: flex; justify-content: space-between; gap: 1rem; align-items: center; font-weight: 700; }}\
-    .picker-close {{\
-      background: rgba(23, 33, 28, 0.06);\
-      color: var(--ink);\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      padding: 0.65rem 0.95rem;\
-    }}\
-    .picker-list {{ display: grid; gap: 0.55rem; overflow: auto; padding-right: 0.2rem; }}\
-    .picker-option {{\
-      width: 100%;\
-      display: grid;\
-      gap: 0.22rem;\
-      justify-items: start;\
-      padding: 0.92rem 1rem;\
-      border-radius: 1rem;\
-      background: rgba(23, 33, 28, 0.04);\
-      color: var(--ink);\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      text-align: left;\
-    }}\
-    .picker-option span {{ color: var(--muted); font-size: 0.94rem; }}\
+    body {{ margin: 0; min-height: 100vh; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.6; }}\
+    main {{ max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem; }}\
+    .prompt {{ color: #3fb950; margin-bottom: 1.5rem; }}\
+    .hint {{ color: #8b949e; font-size: 13px; margin-bottom: 1rem; }}\
+    .notice {{ padding: 0.6rem 0.8rem; margin-bottom: 1rem; }}\
+    .notice-ok {{ color: #3fb950; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); }}\
+    .notice-error {{ color: #f85149; background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); }}\
+    label {{ display: block; color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}\
+    .field {{ display: grid; gap: 0.3rem; }}\
+    input, select, textarea {{ width: 100%; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; padding: 0.6rem 0.75rem; font: inherit; }}\
+    input:focus, select:focus, textarea:focus {{ outline: none; border-color: #3fb950; }}\
+    select {{ cursor: pointer; -webkit-appearance: none; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem; }}\
+    select option {{ background: #161b22; color: #c9d1d9; }}\
+    textarea {{ resize: vertical; min-height: 5rem; }}\
+    button {{ padding: 0.6rem 1rem; background: #3fb950; color: #0d1117; border: none; font: inherit; font-weight: 600; cursor: pointer; }}\
+    button:hover {{ background: #2ea043; }}\
+    .form-stack {{ display: grid; gap: 1rem; }}\
     .is-hidden {{ display: none !important; }}\
-    .visually-hidden {{\
-      position: absolute;\
-      width: 1px;\
-      height: 1px;\
-      padding: 0;\
-      margin: -1px;\
-      overflow: hidden;\
-      clip: rect(0, 0, 0, 0);\
-      white-space: nowrap;\
-      border: 0;\
-    }}\
-    @keyframes rise {{ from {{ opacity: 0; transform: translateY(16px); }} to {{ opacity: 1; transform: none; }} }}\
-    @media (max-width: 760px) {{\
-      main {{ padding: 0.75rem; }}\
-      .page-topbar {{ align-items: center; }}\
-      .setup-card, .console-card {{ padding: 0.95rem; border-radius: 1.25rem; }}\
-      .device-popover {{ position: fixed; top: 4.2rem; right: 0.75rem; left: 0.75rem; min-width: 0; }}\
-      button {{ width: 100%; }}\
-      .message {{ max-width: none; }}\
-    }}\
+    .transcript {{ border: 1px solid #30363d; padding: 1rem; margin-bottom: 1rem; min-height: 12rem; }}\
+    .msg {{ padding: 0.4rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }}\
+    .msg-user .msg-prefix {{ color: #3fb950; }}\
+    .msg-claw .msg-prefix {{ color: #d2a8ff; }}\
+    .msg-empty {{ color: #8b949e; }}\
+    .composer {{ display: grid; gap: 0.6rem; }}\
+    .composer-row {{ display: flex; justify-content: flex-end; }}\
+    .settings {{ border-top: 1px solid #30363d; margin-top: 1.5rem; padding-top: 1rem; }}\
+    .settings summary {{ cursor: pointer; color: #8b949e; font-size: 13px; list-style: none; }}\
+    .settings summary::-webkit-details-marker {{ display: none; }}\
+    .settings[open] summary {{ margin-bottom: 1rem; }}\
+    .device-info {{ color: #8b949e; font-size: 12px; margin-top: 2rem; border-top: 1px solid #21262d; padding-top: 0.75rem; }}\
   </style>\
 </head>\
 <body>\
@@ -1279,367 +977,170 @@ fn render_document(device_name: &str, body_html: &str) -> String {
 fn render_ui_script() -> String {
     String::from(
         r#"(function () {
-  const catalogNode = document.getElementById("clawpi-provider-catalog");
-  if (!catalogNode) {
-    return;
-  }
+  var catalogNode = document.getElementById("clawpi-provider-catalog");
+  if (!catalogNode) return;
 
-  const MODEL_CUSTOM_ID = "__custom__";
-  const AUTH_MODE_API_KEY = "api_key";
-  const presets = JSON.parse(catalogNode.textContent || "[]");
-  const presetMap = Object.fromEntries(presets.map((preset) => [preset.id, preset]));
+  var CUSTOM = "__custom__";
+  var presets = JSON.parse(catalogNode.textContent || "[]");
+  var presetMap = {};
+  presets.forEach(function (p) { presetMap[p.id] = p; });
 
-  function text(node, value) {
-    if (node) {
-      node.textContent = value;
-    }
-  }
-
-  function toggle(node, hidden) {
-    if (node) {
-      node.classList.toggle("is-hidden", hidden);
-    }
-  }
-
-  function filterPicker(container, query) {
-    const needle = query.trim().toLowerCase();
-    container.querySelectorAll("[data-searchable]").forEach((item) => {
-      const haystack = (item.dataset.searchable || "").toLowerCase();
-      item.classList.toggle("is-hidden", needle && !haystack.includes(needle));
-    });
-  }
-
-  function presetForProvider(providerValue) {
-    return presetMap[providerValue] || (providerValue ? presetMap.custom : null);
-  }
-
-  function modelLabelFor(preset, modelId) {
-    if (!preset || !modelId) {
-      return "Select model";
-    }
-
-    const match = preset.models.find((option) => option.id === modelId);
-    return match ? match.label : "Custom model";
-  }
-
-  function defaultAuthFor(preset, hasSecret) {
-    if (!preset) {
-      return AUTH_MODE_API_KEY;
-    }
-
-    if (preset.id === "custom") {
-      return hasSecret ? AUTH_MODE_API_KEY : preset.default_auth;
-    }
-
-    if (preset.id === "gemini" && !hasSecret) {
-      return "device_login";
-    }
-
-    return hasSecret ? AUTH_MODE_API_KEY : preset.default_auth;
+  function toggle(el, hidden) {
+    if (el) el.classList.toggle("is-hidden", hidden);
   }
 
   function initForm(form) {
-    const formMode = form.dataset.formMode || "setup";
-    const initialProviderValue = form.dataset.initialProvider || "";
-    const initialModelValue = form.dataset.initialModel || "";
-    const initialHasSecret = form.dataset.initialHasSecret === "true";
+    var formMode = form.dataset.formMode || "setup";
+    var initialProvider = form.dataset.initialProvider || "";
+    var initialModel = form.dataset.initialModel || "";
+    var initialHasSecret = form.dataset.initialHasSecret === "true";
 
-    const providerPresetInput = form.querySelector('input[name="provider_preset"]');
-    const providerValueInput = form.querySelector('input[name="provider_value"]');
-    const authModeInput = form.querySelector('input[name="auth_mode"]');
-    const modelInput = form.querySelector('input[name="model"]');
-    const providerCustomInput = form.querySelector('input[name="provider_custom"]');
-    const modelCustomInput = form.querySelector('input[name="model_custom"]');
-    const apiKeyInput = form.querySelector('input[name="api_key"]');
+    var providerSelect = form.querySelector("[data-provider-select]");
+    var authSelect = form.querySelector("[data-auth-select]");
+    var modelSelect = form.querySelector("[data-model-select]");
+    var authModeInput = form.querySelector('input[name="auth_mode"]');
+    var providerCustomInput = form.querySelector('input[name="provider_custom"]');
+    var modelCustomInput = form.querySelector('input[name="model_custom"]');
+    var apiKeyInput = form.querySelector('input[name="api_key"]');
+    var credentialLabel = form.querySelector("[data-credential-label]");
+    var routeField = form.querySelector('[data-field="route"]');
+    var authField = form.querySelector('[data-field="auth"]');
+    var credentialField = form.querySelector('[data-field="credential"]');
+    var modelField = form.querySelector('[data-field="model"]');
+    var customModelField = form.querySelector('[data-field="custom-model"]');
 
-    const providerButton = form.querySelector('[data-open-picker="provider"]');
-    const modelButton = form.querySelector('[data-open-picker="model"]');
-    const providerLabel = form.querySelector("[data-provider-label]");
-    const modelLabel = form.querySelector("[data-model-label]");
-    const routeField = form.querySelector('[data-field="route"]');
-    const authField = form.querySelector('[data-field="auth"]');
-    const authOptionsRoot = form.querySelector("[data-auth-options]");
-    const credentialField = form.querySelector('[data-field="credential"]');
-    const credentialLabel = form.querySelector("[data-credential-label]");
-    const customModelField = form.querySelector('[data-field="custom-model"]');
-    const submitButton = form.querySelector('button[type="submit"]');
-    const modelOptionsRoot = form.querySelector("[data-model-options]");
-
-    const providerSheet = form.querySelector('[data-picker="provider"]');
-    const modelSheet = form.querySelector('[data-picker="model"]');
-    const providerSearch = form.querySelector("[data-picker-search]");
-    const modelSearch = form.querySelector("[data-model-search]");
-
-    let state = {
-      preset: null,
-      providerValue: "",
-      authMode: "",
-      modelValue: "",
-      customModel: false,
-    };
-
-    function openSheet(sheet, searchInput) {
-      if (!sheet) return;
-      toggle(sheet, false);
-      if (searchInput) {
-        searchInput.value = "";
-        searchInput.focus();
-      }
+    function getPreset() {
+      var v = providerSelect.value;
+      return presetMap[v] || null;
     }
 
-    function closeSheet(sheet) {
-      toggle(sheet, true);
-    }
-
-    function renderAuthOptions(preset) {
+    function updateAuth(preset) {
       if (!preset || preset.auth_options.length <= 1) {
-        authOptionsRoot.innerHTML = "";
         toggle(authField, true);
+        if (preset && preset.auth_options.length === 1) {
+          authModeInput.value = preset.auth_options[0].id;
+          updateCredential(preset.auth_options[0]);
+        } else {
+          authModeInput.value = "";
+          toggle(credentialField, true);
+        }
         return;
       }
-
-      authOptionsRoot.innerHTML = preset.auth_options
-        .map((option) => {
-          const activeClass = option.id === state.authMode ? " is-active" : "";
-          return (
-            '<button type="button" class="choice-pill' +
-            activeClass +
-            '" data-auth-option="' +
-            option.id +
-            '">' +
-            option.label +
-            "</button>"
-          );
-        })
-        .join("");
-
-      authOptionsRoot.querySelectorAll("[data-auth-option]").forEach((button) => {
-        button.addEventListener("click", () => {
-          setAuthMode(button.dataset.authOption || "");
-        });
+      authSelect.innerHTML = "";
+      preset.auth_options.forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt.id;
+        o.textContent = opt.label;
+        authSelect.appendChild(o);
       });
-
+      var defaultAuth = preset.default_auth;
+      if (initialHasSecret && preset.auth_options.some(function (o) { return o.id === "api_key"; })) {
+        defaultAuth = "api_key";
+      }
+      authSelect.value = defaultAuth;
+      authModeInput.value = defaultAuth;
       toggle(authField, false);
+      var selected = preset.auth_options.find(function (o) { return o.id === defaultAuth; }) || preset.auth_options[0];
+      updateCredential(selected);
     }
 
-    function renderModelOptions(preset) {
-      if (!preset) {
-        modelOptionsRoot.innerHTML = "";
-        return;
-      }
-
-      modelOptionsRoot.innerHTML = preset.models
-        .map((option) => {
-          const searchable = (option.label + " " + option.id).toLowerCase();
-          return (
-            '<button type="button" class="picker-option" data-model-id="' +
-            option.id +
-            '" data-searchable="' +
-            searchable +
-            '"><strong>' +
-            option.label +
-            "</strong><span>" +
-            (option.id === MODEL_CUSTOM_ID ? "Type a model ID" : option.id) +
-            "</span></button>"
-          );
-        })
-        .join("");
-
-      modelOptionsRoot.querySelectorAll("[data-model-id]").forEach((button) => {
-        button.addEventListener("click", () => {
-          setModel(button.dataset.modelId || "");
-          closeSheet(modelSheet);
-        });
-      });
-    }
-
-    function syncProviderValue() {
-      if (!state.preset) {
-        providerValueInput.value = "";
-        return;
-      }
-
-      if (state.preset.route_editable) {
-        state.providerValue = providerCustomInput.value.trim();
-      } else {
-        state.providerValue = state.preset.id;
-      }
-      providerValueInput.value = state.providerValue;
-    }
-
-    function syncModelValue() {
-      if (state.customModel) {
-        state.modelValue = modelCustomInput.value.trim();
-      }
-      modelInput.value = state.modelValue;
-    }
-
-    function setAuthMode(modeId) {
-      if (!state.preset) {
-        return;
-      }
-
-      const authOption =
-        state.preset.auth_options.find((option) => option.id === modeId) ||
-        state.preset.auth_options[0];
-
-      state.authMode = authOption.id;
-      authModeInput.value = authOption.id;
-      renderAuthOptions(state.preset);
-
-      if (authOption.requires_secret) {
-        text(credentialLabel, authOption.secret_label || "API key");
-        apiKeyInput.placeholder = authOption.secret_placeholder || "sk-...";
-        toggle(credentialField, false);
-      } else {
+    function updateCredential(authOption) {
+      if (!authOption || !authOption.requires_secret) {
         toggle(credentialField, true);
-      }
-    }
-
-    function setModel(modelId) {
-      if (!state.preset) {
         return;
       }
-
-      const nextModel = modelId || state.preset.default_model;
-      state.customModel = nextModel === MODEL_CUSTOM_ID;
-
-      if (state.customModel) {
-        text(modelLabel, "Custom model");
-        toggle(customModelField, false);
-        state.modelValue = modelCustomInput.value.trim();
-      } else {
-        state.modelValue = nextModel;
-        text(modelLabel, modelLabelFor(state.preset, nextModel));
-        toggle(customModelField, true);
-      }
-
-      syncModelValue();
-      toggle(modelButton, false);
+      if (credentialLabel) credentialLabel.textContent = authOption.secret_label || "API key";
+      if (apiKeyInput) apiKeyInput.placeholder = authOption.secret_placeholder || "sk-...";
+      toggle(credentialField, false);
     }
 
-    function setProvider(providerId, initialSelection) {
-      const preset = presetMap[providerId];
+    function updateModels(preset) {
       if (!preset) {
+        toggle(modelField, true);
+        toggle(customModelField, true);
         return;
       }
+      modelSelect.innerHTML = "";
+      preset.models.forEach(function (m) {
+        var o = document.createElement("option");
+        o.value = m.id;
+        o.textContent = m.label;
+        modelSelect.appendChild(o);
+      });
 
-      state.preset = preset;
-      providerPresetInput.value = preset.id;
-      text(providerLabel, preset.label);
-
-      providerCustomInput.readOnly = !preset.route_editable;
-      providerCustomInput.value = preset.route_editable
-        ? initialSelection || providerCustomInput.value
-        : preset.id;
-      toggle(routeField, preset.route_editable);
-      syncProviderValue();
-
-      state.authMode = defaultAuthFor(preset, initialHasSecret);
-      renderAuthOptions(preset);
-      setAuthMode(state.authMode);
-      renderModelOptions(preset);
-
-      const selectedModel =
-        initialModelValue && presetForProvider(initialProviderValue)?.id === preset.id
-          ? initialModelValue
-          : preset.default_model;
-
-      if (preset.models.some((option) => option.id === selectedModel)) {
-        setModel(selectedModel);
-      } else if (initialModelValue && presetForProvider(initialProviderValue)?.id === preset.id) {
-        modelCustomInput.value = initialModelValue;
-        setModel(MODEL_CUSTOM_ID);
-      } else {
-        modelCustomInput.value = "";
-        setModel(selectedModel);
+      var chosen = preset.default_model;
+      if (initialModel && initialProvider === preset.id) {
+        if (preset.models.some(function (m) { return m.id === initialModel; })) {
+          chosen = initialModel;
+        } else {
+          chosen = CUSTOM;
+          if (modelCustomInput) modelCustomInput.value = initialModel;
+        }
       }
+      modelSelect.value = chosen;
+      toggle(modelField, false);
+      toggle(customModelField, chosen === CUSTOM);
     }
 
-    providerCustomInput.addEventListener("input", syncProviderValue);
-    modelCustomInput.addEventListener("input", syncModelValue);
-
-    providerSearch?.addEventListener("input", () => {
-      filterPicker(providerSheet, providerSearch.value);
-    });
-
-    modelSearch?.addEventListener("input", () => {
-      filterPicker(modelSheet, modelSearch.value);
-    });
-
-    form.querySelectorAll("[data-close-picker]").forEach((button) => {
-      button.addEventListener("click", () => {
-        closeSheet(providerSheet);
-        closeSheet(modelSheet);
-      });
-    });
-
-    providerButton?.addEventListener("click", () => {
-      openSheet(providerSheet, providerSearch);
-    });
-
-    modelButton?.addEventListener("click", () => {
-      openSheet(modelSheet, modelSearch);
-    });
-
-    providerSheet?.addEventListener("click", (event) => {
-      if (event.target === providerSheet) {
-        closeSheet(providerSheet);
+    function onProviderChange() {
+      var preset = getPreset();
+      toggle(routeField, preset ? preset.route_editable : false);
+      if (preset && providerCustomInput) {
+        providerCustomInput.value = preset.route_editable ? "" : preset.id;
       }
-    });
+      updateAuth(preset);
+      updateModels(preset);
+    }
 
-    modelSheet?.addEventListener("click", (event) => {
-      if (event.target === modelSheet) {
-        closeSheet(modelSheet);
-      }
-    });
+    providerSelect.addEventListener("change", onProviderChange);
 
-    form.querySelectorAll("[data-provider-id]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const providerId = button.dataset.providerId || "";
-        setProvider(providerId, providerId === "custom" ? initialProviderValue : providerId);
-        closeSheet(providerSheet);
+    if (authSelect) {
+      authSelect.addEventListener("change", function () {
+        var preset = getPreset();
+        if (!preset) return;
+        authModeInput.value = authSelect.value;
+        var opt = preset.auth_options.find(function (o) { return o.id === authSelect.value; });
+        updateCredential(opt);
       });
-    });
+    }
 
-    form.addEventListener("submit", (event) => {
-      syncProviderValue();
-      syncModelValue();
+    if (modelSelect) {
+      modelSelect.addEventListener("change", function () {
+        toggle(customModelField, modelSelect.value === CUSTOM);
+      });
+    }
 
-      if (!providerValueInput.value.trim()) {
-        event.preventDefault();
-        openSheet(providerSheet, providerSearch);
+    form.addEventListener("submit", function (e) {
+      if (!providerSelect.value) {
+        e.preventDefault();
+        providerSelect.focus();
         return;
       }
-
-      if (!modelInput.value.trim()) {
-        event.preventDefault();
-        openSheet(modelSheet, modelSearch);
+      if (modelSelect && !modelSelect.value) {
+        e.preventDefault();
+        modelSelect.focus();
         return;
       }
-
-      const authOption =
-        state.preset?.auth_options.find((option) => option.id === state.authMode) || null;
-      if (authOption && authOption.requires_secret && !apiKeyInput.value.trim()) {
-        const canReuse =
-          formMode === "update" &&
-          initialHasSecret &&
-          initialProviderValue === providerValueInput.value.trim();
+      if (modelSelect && modelSelect.value === CUSTOM && modelCustomInput && !modelCustomInput.value.trim()) {
+        e.preventDefault();
+        modelCustomInput.focus();
+        return;
+      }
+      var preset = getPreset();
+      var authId = authModeInput.value;
+      var authOpt = preset && preset.auth_options.find(function (o) { return o.id === authId; });
+      if (authOpt && authOpt.requires_secret && apiKeyInput && !apiKeyInput.value.trim()) {
+        var canReuse = formMode === "update" && initialHasSecret && initialProvider === providerSelect.value;
         if (!canReuse) {
-          event.preventDefault();
+          e.preventDefault();
           apiKeyInput.focus();
+          return;
         }
       }
     });
 
-    if (initialProviderValue) {
-      const initialPreset = presetForProvider(initialProviderValue);
-      if (initialPreset) {
-        setProvider(
-          initialPreset.id,
-          initialPreset.id === "custom" ? initialProviderValue : initialPreset.id
-        );
-      }
+    if (providerSelect.value) {
+      onProviderChange();
     }
   }
 
