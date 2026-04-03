@@ -77,14 +77,6 @@ const AUTH_LOCAL: UiAuthOption = UiAuthOption {
     requires_secret: false,
 };
 
-const AUTH_NO_KEY: UiAuthOption = UiAuthOption {
-    id: AUTH_MODE_NO_KEY,
-    label: "No key",
-    secret_label: None,
-    secret_placeholder: None,
-    requires_secret: false,
-};
-
 const OPENROUTER_MODELS: &[UiModelOption] = &[
     UiModelOption {
         id: "anthropic/claude-sonnet-4.6",
@@ -102,10 +94,6 @@ const OPENROUTER_MODELS: &[UiModelOption] = &[
         id: "google/gemini-3-pro-preview",
         label: "Gemini 3 Pro Preview",
     },
-    UiModelOption {
-        id: MODEL_CUSTOM_ID,
-        label: "Custom model",
-    },
 ];
 
 const ANTHROPIC_MODELS: &[UiModelOption] = &[
@@ -121,10 +109,6 @@ const ANTHROPIC_MODELS: &[UiModelOption] = &[
         id: "claude-haiku-4-5-20251001",
         label: "Claude Haiku 4.5",
     },
-    UiModelOption {
-        id: MODEL_CUSTOM_ID,
-        label: "Custom model",
-    },
 ];
 
 const OPENAI_MODELS: &[UiModelOption] = &[
@@ -139,10 +123,6 @@ const OPENAI_MODELS: &[UiModelOption] = &[
     UiModelOption {
         id: "gpt-5.2-codex",
         label: "GPT-5.2 Codex",
-    },
-    UiModelOption {
-        id: MODEL_CUSTOM_ID,
-        label: "Custom model",
     },
 ];
 
@@ -174,10 +154,6 @@ const GEMINI_MODELS: &[UiModelOption] = &[
         id: "gemini-2.5-flash",
         label: "Gemini 2.5 Flash",
     },
-    UiModelOption {
-        id: MODEL_CUSTOM_ID,
-        label: "Custom model",
-    },
 ];
 
 const GROQ_MODELS: &[UiModelOption] = &[
@@ -192,10 +168,6 @@ const GROQ_MODELS: &[UiModelOption] = &[
     UiModelOption {
         id: "openai/gpt-oss-20b",
         label: "GPT-OSS 20B",
-    },
-    UiModelOption {
-        id: MODEL_CUSTOM_ID,
-        label: "Custom model",
     },
 ];
 
@@ -212,16 +184,7 @@ const OLLAMA_MODELS: &[UiModelOption] = &[
         id: "mistral",
         label: "Mistral",
     },
-    UiModelOption {
-        id: MODEL_CUSTOM_ID,
-        label: "Custom model",
-    },
 ];
-
-const CUSTOM_MODELS: &[UiModelOption] = &[UiModelOption {
-    id: MODEL_CUSTOM_ID,
-    label: "Custom model",
-}];
 
 const PROVIDER_PRESETS: &[UiProviderPreset] = &[
     UiProviderPreset {
@@ -300,17 +263,6 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         default_auth: AUTH_MODE_LOCAL,
         auth_options: &[AUTH_LOCAL],
         models: OLLAMA_MODELS,
-    },
-    UiProviderPreset {
-        id: "custom",
-        label: "Custom",
-        hint: "OpenAI-compatible route",
-        route_editable: true,
-        route_placeholder: "custom:https://your-endpoint/v1",
-        default_model: "default",
-        default_auth: AUTH_MODE_NO_KEY,
-        auth_options: &[AUTH_NO_KEY, AUTH_API_KEY],
-        models: CUSTOM_MODELS,
     },
 ];
 
@@ -646,8 +598,7 @@ fn render_setup_view(
     let ai_form = render_ai_form(config, "setup-ai", "Continue", "setup");
 
     format!(
-        "<div class=\"prompt\">&gt; clawpi setup — ai</div>\
-         <div class=\"hint\">Configure an AI provider to continue.</div>\
+        "<div class=\"hint\">Set up your AI provider to get started.</div>\
          {notice_html}\
          {error_html}\
          {ai_form}\
@@ -672,8 +623,7 @@ fn render_chat_view(
     let transcript_html = render_transcript(last_prompt, answer);
 
     format!(
-        "<div class=\"prompt\">&gt; clawpi</div>\
-         {notice_html}\
+        "{notice_html}\
          {error_html}\
          <div class=\"transcript\">{transcript_html}</div>\
          <form method=\"post\" action=\"/prompt\" class=\"composer\">\
@@ -726,12 +676,8 @@ fn render_ai_form(
                {provider_options_html}\
              </select>\
            </div>\
-           <div class=\"field is-hidden\" data-field=\"route\">\
-             <label for=\"{form_id}-provider-custom\">Provider route</label>\
-             <input id=\"{form_id}-provider-custom\" name=\"provider_custom\" value=\"{initial_provider}\" placeholder=\"custom:https://your-endpoint/v1\" spellcheck=\"false\" autocapitalize=\"off\">\
-           </div>\
            <div class=\"field is-hidden\" data-field=\"auth\">\
-             <label for=\"{form_id}-auth\">Auth method</label>\
+             <label for=\"{form_id}-auth\">Sign-in method</label>\
              <select id=\"{form_id}-auth\" data-auth-select></select>\
            </div>\
            <div class=\"field is-hidden\" data-field=\"credential\">\
@@ -741,10 +687,6 @@ fn render_ai_form(
            <div class=\"field is-hidden\" data-field=\"model\">\
              <label for=\"{form_id}-model\">Model</label>\
              <select id=\"{form_id}-model\" name=\"model\" data-model-select></select>\
-           </div>\
-           <div class=\"field is-hidden\" data-field=\"custom-model\">\
-             <label for=\"{form_id}-model-custom\">Custom model ID</label>\
-             <input id=\"{form_id}-model-custom\" name=\"model_custom\" value=\"{initial_model}\" placeholder=\"model-id\" spellcheck=\"false\" autocapitalize=\"off\">\
            </div>\
            <button type=\"submit\">{submit_label}</button>\
          </form>",
@@ -931,8 +873,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     * {{ box-sizing: border-box; }}\
     body {{ margin: 0; min-height: 100vh; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.6; }}\
     main {{ max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem; }}\
-    .prompt {{ color: #3fb950; margin-bottom: 1.5rem; }}\
-    .hint {{ color: #8b949e; font-size: 13px; margin-bottom: 1rem; }}\
+    .hint {{ color: #8b949e; font-size: 13px; margin-bottom: 1.5rem; }}\
     .notice {{ padding: 0.6rem 0.8rem; margin-bottom: 1rem; }}\
     .notice-ok {{ color: #3fb950; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); }}\
     .notice-error {{ color: #f85149; background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); }}\
@@ -980,7 +921,6 @@ fn render_ui_script() -> String {
   var catalogNode = document.getElementById("clawpi-provider-catalog");
   if (!catalogNode) return;
 
-  var CUSTOM = "__custom__";
   var presets = JSON.parse(catalogNode.textContent || "[]");
   var presetMap = {};
   presets.forEach(function (p) { presetMap[p.id] = p; });
@@ -999,19 +939,14 @@ fn render_ui_script() -> String {
     var authSelect = form.querySelector("[data-auth-select]");
     var modelSelect = form.querySelector("[data-model-select]");
     var authModeInput = form.querySelector('input[name="auth_mode"]');
-    var providerCustomInput = form.querySelector('input[name="provider_custom"]');
-    var modelCustomInput = form.querySelector('input[name="model_custom"]');
     var apiKeyInput = form.querySelector('input[name="api_key"]');
     var credentialLabel = form.querySelector("[data-credential-label]");
-    var routeField = form.querySelector('[data-field="route"]');
     var authField = form.querySelector('[data-field="auth"]');
     var credentialField = form.querySelector('[data-field="credential"]');
     var modelField = form.querySelector('[data-field="model"]');
-    var customModelField = form.querySelector('[data-field="custom-model"]');
 
     function getPreset() {
-      var v = providerSelect.value;
-      return presetMap[v] || null;
+      return presetMap[providerSelect.value] || null;
     }
 
     function updateAuth(preset) {
@@ -1057,7 +992,6 @@ fn render_ui_script() -> String {
     function updateModels(preset) {
       if (!preset) {
         toggle(modelField, true);
-        toggle(customModelField, true);
         return;
       }
       modelSelect.innerHTML = "";
@@ -1067,27 +1001,18 @@ fn render_ui_script() -> String {
         o.textContent = m.label;
         modelSelect.appendChild(o);
       });
-
       var chosen = preset.default_model;
       if (initialModel && initialProvider === preset.id) {
         if (preset.models.some(function (m) { return m.id === initialModel; })) {
           chosen = initialModel;
-        } else {
-          chosen = CUSTOM;
-          if (modelCustomInput) modelCustomInput.value = initialModel;
         }
       }
       modelSelect.value = chosen;
       toggle(modelField, false);
-      toggle(customModelField, chosen === CUSTOM);
     }
 
     function onProviderChange() {
       var preset = getPreset();
-      toggle(routeField, preset ? preset.route_editable : false);
-      if (preset && providerCustomInput) {
-        providerCustomInput.value = preset.route_editable ? "" : preset.id;
-      }
       updateAuth(preset);
       updateModels(preset);
     }
@@ -1104,12 +1029,6 @@ fn render_ui_script() -> String {
       });
     }
 
-    if (modelSelect) {
-      modelSelect.addEventListener("change", function () {
-        toggle(customModelField, modelSelect.value === CUSTOM);
-      });
-    }
-
     form.addEventListener("submit", function (e) {
       if (!providerSelect.value) {
         e.preventDefault();
@@ -1119,11 +1038,6 @@ fn render_ui_script() -> String {
       if (modelSelect && !modelSelect.value) {
         e.preventDefault();
         modelSelect.focus();
-        return;
-      }
-      if (modelSelect && modelSelect.value === CUSTOM && modelCustomInput && !modelCustomInput.value.trim()) {
-        e.preventDefault();
-        modelCustomInput.focus();
         return;
       }
       var preset = getPreset();
