@@ -199,9 +199,9 @@ At the moment this looks like:
 - the mode targets are cleaned up after activation so setup mode can be entered again cleanly
 - `clawpi.target` now starts `clawpi-sessiond`, which keeps a minimal runtime heartbeat under `/run/clawpi`
 - `clawpi.target` now also starts `clawpi-agentd`, which listens on a local Unix socket under `/run/clawpi` and owns prompt execution for the proving ground
-- the same `/etc/clawpi/config.toml` contract now also carries the first AI runtime fields: provider, model, and API key
+- the same `/etc/clawpi/config.toml` contract now also carries the first AI runtime fields: provider, model, and provider-specific auth
 - `clawpi.target` also starts `clawpi-webd`, which serves the local browser control surface at `http://<device-name>.local/`
-- if the AI fields are missing, `clawpi-webd` becomes a first-run setup shell that asks for the local Claw provider, model, and API key
+- if the AI fields are missing, `clawpi-webd` becomes a first-run setup shell that asks for the local Claw provider, model, and provider-specific auth
 - once those AI fields are present, `clawpi-webd` turns into a narrow local Claw console with a single prompt surface and tucked-away settings
 - today that local gateway is still intentionally narrow: it is more of an OS-owned proving-ground surface than a full agent runtime
 - the current prompt path now crosses a local runtime boundary: `clawpi-webd` sends prompt requests to `clawpi-agentd`, and `clawpi-agentd` hands those requests into an upstream ZeroClaw-based runtime
@@ -209,7 +209,7 @@ At the moment this looks like:
 - local shell and tool execution for prompt handling now comes from the reused ZeroClaw runtime instead of a ClawPi-owned OpenAI Responses loop
 - the runtime target is still to reuse or fork ZeroClaw/OpenClaw or a similar Rust-based agent core and run it as a system-level Claw service inside normal mode
 - that embedded runtime should own sessions, memory, tool use, shell access, and long-running task behavior, while `clawpi-webd` stays a front end
-- auth is only one slice of that work; ClawPi may still support both raw API keys and a GPT-style account flow later
+- auth is only one slice of that work; ClawPi may still support raw API keys, local runtimes, and account-based sign-in flows later
 - `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
 
 This is a proving-ground path, not the final image design.

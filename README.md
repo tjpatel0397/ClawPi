@@ -87,7 +87,7 @@ The repo now includes:
 - a minimal setup contract built around `/etc/clawpi/config.toml`
 - a first headless onboarding path that opens a temporary ClawPi setup network and local setup page in setup mode, with captive-portal hints and a direct `http://192.168.64.1/` fallback
 - a first normal-mode local Claw gateway at `http://<device-name>.local/` so the phone handoff can continue without requiring SSH
-- local AI setup fields in the ClawPi config contract so the device can be given its provider, model, and API key after Wi-Fi onboarding
+- local AI setup fields in the ClawPi config contract so the device can be given its provider, model, and provider-specific auth after Wi-Fi onboarding
 - a small browser-based local console that starts with AI setup and then turns into a focused prompt surface for talking to the device
 - a proving-ground `clawpi.local` flow that is now functional end-to-end as a setup-first handoff instead of a dense management page
 - a first local `clawpi-agentd` service that moves prompt execution behind a Unix-socket runtime boundary under `/run/clawpi`

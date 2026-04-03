@@ -135,7 +135,7 @@ DNS does not resolve `setup.clawpi`.
 The same image payload now also installs `avahi-daemon`, a small
 `clawpi-agentd` local agent service, and `clawpi-webd` as its browser front end
 so a successful phone setup can hand off to `http://<device-name>.local/`,
-store the AI provider/model/API key on-device, and continue into a setup-first
+store the AI provider/model/auth choice on-device, and continue into a setup-first
 local Claw console instead of requiring SSH. In the current proving ground,
 that local agent service now wraps upstream ZeroClaw as the embedded runtime
 behind the browser surface.

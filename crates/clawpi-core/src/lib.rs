@@ -404,7 +404,7 @@ pub fn set_ai_profile(
     layout: &Layout,
     provider: &str,
     model: Option<&str>,
-    api_key: &str,
+    api_key: Option<&str>,
 ) -> io::Result<ClawPiConfig> {
     layout.ensure_dirs()?;
 
@@ -412,13 +412,17 @@ pub fn set_ai_profile(
         .map_err(|reason| io::Error::new(io::ErrorKind::InvalidInput, reason))?;
     let normalized_model = normalize_ai_model(model.unwrap_or(DEFAULT_AI_MODEL))
         .map_err(|reason| io::Error::new(io::ErrorKind::InvalidInput, reason))?;
-    let normalized_api_key = normalize_ai_api_key(api_key)
+    let normalized_api_key = api_key
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| normalize_ai_api_key(value))
+        .transpose()
         .map_err(|reason| io::Error::new(io::ErrorKind::InvalidInput, reason))?;
 
     let mut config = config_for_update(layout)?;
     config.ai_provider = Some(normalized_provider);
     config.ai_model = Some(normalized_model);
-    config.ai_api_key = Some(normalized_api_key);
+    config.ai_api_key = normalized_api_key;
     validate_config(&config).map_err(invalid_data)?;
     write_config(layout, &config)?;
 
@@ -440,12 +444,8 @@ pub fn clear_ai_profile(layout: &Layout) -> io::Result<ClawPiConfig> {
 
 pub fn ai_configured(config: &ClawPiConfig) -> bool {
     matches!(
-        (
-            config.ai_provider.as_deref(),
-            config.ai_model.as_deref(),
-            config.ai_api_key.as_deref(),
-        ),
-        (Some(_), Some(_), Some(_))
+        (config.ai_provider.as_deref(), config.ai_model.as_deref()),
+        (Some(_), Some(_))
     )
 }
 
@@ -804,14 +804,16 @@ fn validate_config(config: &ClawPiConfig) -> Result<(), String> {
         config.ai_api_key.as_deref(),
     ) {
         (None, None, None) => {}
-        (Some(provider), Some(model), Some(api_key)) => {
+        (Some(provider), Some(model), api_key) => {
             normalize_ai_provider(provider)?;
             normalize_ai_model(model)?;
-            normalize_ai_api_key(api_key)?;
+            if let Some(api_key) = api_key {
+                normalize_ai_api_key(api_key)?;
+            }
         }
         _ => {
             return Err(String::from(
-                "ai_provider, ai_model, and ai_api_key must be set together",
+                "ai_provider and ai_model must be set together",
             ))
         }
     }
@@ -1187,7 +1189,7 @@ mod tests {
         let root = unique_test_root();
         let layout = Layout::from_root(&root);
 
-        set_ai_profile(&layout, "OpenAI", Some("gpt-5.4"), "sk-test-secret").unwrap();
+        set_ai_profile(&layout, "OpenAI", Some("gpt-5.4"), Some("sk-test-secret")).unwrap();
 
         let state = inspect_state(&layout).unwrap();
         let config = match state.config_status {
@@ -1211,7 +1213,7 @@ mod tests {
             &layout,
             "Anthropic",
             Some("claude-sonnet-4-20250514"),
-            "sk-ant-test",
+            Some("sk-ant-test"),
         )
         .unwrap();
 
@@ -1235,7 +1237,7 @@ mod tests {
             &layout,
             "custom:https://models.example.invalid/v1",
             Some("gpt-oss"),
-            "sk-custom-test",
+            Some("sk-custom-test"),
         )
         .unwrap();
 
@@ -1248,6 +1250,26 @@ mod tests {
             config.ai_provider.as_deref(),
             Some("custom:https://models.example.invalid/v1")
         );
+
+        cleanup_test_root(&root);
+    }
+
+    #[test]
+    fn set_ai_profile_allows_missing_inline_secret() {
+        let root = unique_test_root();
+        let layout = Layout::from_root(&root);
+
+        set_ai_profile(&layout, "ollama", Some("llama3.2:3b"), None).unwrap();
+
+        let state = inspect_state(&layout).unwrap();
+        let config = match state.config_status {
+            ConfigStatus::Valid(config) => config,
+            ConfigStatus::Missing | ConfigStatus::Invalid(_) => panic!("expected config"),
+        };
+        assert_eq!(config.ai_provider.as_deref(), Some("ollama"));
+        assert_eq!(config.ai_model.as_deref(), Some("llama3.2:3b"));
+        assert_eq!(config.ai_api_key, None);
+        assert!(ai_configured(&config));
 
         cleanup_test_root(&root);
     }

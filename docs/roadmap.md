@@ -164,7 +164,7 @@ Current status:
 - the image path now includes the runtime packages and service wiring for a temporary setup network plus phone-driven onboarding
 - the setup network now includes captive-portal hints and a direct local-IP fallback for phone onboarding
 - normal mode now includes a local browser handoff so the setup phone can continue at `http://<device-name>.local/`
-- the local browser handoff now includes the next OS-owned setup step: storing AI provider, model, and API key from the device itself
+- the local browser handoff now includes the next OS-owned setup step: storing AI provider, model, and provider-specific auth from the device itself
 - `clawpi.local` now exposes a setup-first Claw console: configure the AI runtime, then ask a simple prompt without SSH
 - that console now talks to a first local `clawpi-agentd` proving-ground daemon instead of running prompt handling inside `clawpi-webd`
 - that daemon now wraps upstream ZeroClaw so prompts, tool use, and shell execution come from the reused runtime core

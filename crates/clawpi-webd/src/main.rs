@@ -3,6 +3,7 @@ use clawpi_core::{
     read_optional_file, set_ai_profile, AgentPromptRequest, AgentPromptResponse, ClawPiConfig,
     Layout, Mode, DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER,
 };
+use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
@@ -10,13 +11,307 @@ use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::time::Duration;
 
-const PROVIDER_PRESETS: &[(&str, &str)] = &[
-    ("openrouter", "OpenRouter"),
-    ("anthropic", "Anthropic"),
-    ("openai", "OpenAI"),
-    ("ollama", "Ollama"),
-    ("groq", "Groq"),
-    ("gemini", "Google Gemini"),
+const MODEL_CUSTOM_ID: &str = "__custom__";
+const AUTH_MODE_API_KEY: &str = "api_key";
+const AUTH_MODE_DEVICE_LOGIN: &str = "device_login";
+const AUTH_MODE_LOCAL: &str = "local";
+const AUTH_MODE_NO_KEY: &str = "no_key";
+
+#[derive(Clone, Copy, Serialize)]
+struct UiAuthOption {
+    id: &'static str,
+    label: &'static str,
+    secret_label: Option<&'static str>,
+    secret_placeholder: Option<&'static str>,
+    requires_secret: bool,
+}
+
+#[derive(Clone, Copy, Serialize)]
+struct UiModelOption {
+    id: &'static str,
+    label: &'static str,
+}
+
+#[derive(Clone, Copy, Serialize)]
+struct UiProviderPreset {
+    id: &'static str,
+    label: &'static str,
+    hint: &'static str,
+    route_editable: bool,
+    route_placeholder: &'static str,
+    default_model: &'static str,
+    default_auth: &'static str,
+    auth_options: &'static [UiAuthOption],
+    models: &'static [UiModelOption],
+}
+
+const AUTH_API_KEY: UiAuthOption = UiAuthOption {
+    id: AUTH_MODE_API_KEY,
+    label: "API key",
+    secret_label: Some("API key"),
+    secret_placeholder: Some("sk-..."),
+    requires_secret: true,
+};
+
+const AUTH_ANTHROPIC_KEY: UiAuthOption = UiAuthOption {
+    id: AUTH_MODE_API_KEY,
+    label: "Key or token",
+    secret_label: Some("API key or setup token"),
+    secret_placeholder: Some("sk-ant-..."),
+    requires_secret: true,
+};
+
+const AUTH_DEVICE_LOGIN: UiAuthOption = UiAuthOption {
+    id: AUTH_MODE_DEVICE_LOGIN,
+    label: "Device login",
+    secret_label: None,
+    secret_placeholder: None,
+    requires_secret: false,
+};
+
+const AUTH_LOCAL: UiAuthOption = UiAuthOption {
+    id: AUTH_MODE_LOCAL,
+    label: "Local",
+    secret_label: None,
+    secret_placeholder: None,
+    requires_secret: false,
+};
+
+const AUTH_NO_KEY: UiAuthOption = UiAuthOption {
+    id: AUTH_MODE_NO_KEY,
+    label: "No key",
+    secret_label: None,
+    secret_placeholder: None,
+    requires_secret: false,
+};
+
+const OPENROUTER_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "anthropic/claude-sonnet-4.6",
+        label: "Claude Sonnet 4.6",
+    },
+    UiModelOption {
+        id: "openai/gpt-5.2",
+        label: "GPT-5.2",
+    },
+    UiModelOption {
+        id: "openai/gpt-5-mini",
+        label: "GPT-5 mini",
+    },
+    UiModelOption {
+        id: "google/gemini-3-pro-preview",
+        label: "Gemini 3 Pro Preview",
+    },
+    UiModelOption {
+        id: MODEL_CUSTOM_ID,
+        label: "Custom model",
+    },
+];
+
+const ANTHROPIC_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "claude-sonnet-4-5-20250929",
+        label: "Claude Sonnet 4.5",
+    },
+    UiModelOption {
+        id: "claude-opus-4-6",
+        label: "Claude Opus 4.6",
+    },
+    UiModelOption {
+        id: "claude-haiku-4-5-20251001",
+        label: "Claude Haiku 4.5",
+    },
+    UiModelOption {
+        id: MODEL_CUSTOM_ID,
+        label: "Custom model",
+    },
+];
+
+const OPENAI_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "gpt-5.2",
+        label: "GPT-5.2",
+    },
+    UiModelOption {
+        id: "gpt-5-mini",
+        label: "GPT-5 mini",
+    },
+    UiModelOption {
+        id: "gpt-5.2-codex",
+        label: "GPT-5.2 Codex",
+    },
+    UiModelOption {
+        id: MODEL_CUSTOM_ID,
+        label: "Custom model",
+    },
+];
+
+const OPENAI_CODEX_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "gpt-5-codex",
+        label: "GPT-5 Codex",
+    },
+    UiModelOption {
+        id: "gpt-5.2-codex",
+        label: "GPT-5.2 Codex",
+    },
+    UiModelOption {
+        id: "o4-mini",
+        label: "o4-mini",
+    },
+];
+
+const GEMINI_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "gemini-3-pro-preview",
+        label: "Gemini 3 Pro Preview",
+    },
+    UiModelOption {
+        id: "gemini-2.5-pro",
+        label: "Gemini 2.5 Pro",
+    },
+    UiModelOption {
+        id: "gemini-2.5-flash",
+        label: "Gemini 2.5 Flash",
+    },
+    UiModelOption {
+        id: MODEL_CUSTOM_ID,
+        label: "Custom model",
+    },
+];
+
+const GROQ_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "llama-3.3-70b-versatile",
+        label: "Llama 3.3 70B",
+    },
+    UiModelOption {
+        id: "openai/gpt-oss-120b",
+        label: "GPT-OSS 120B",
+    },
+    UiModelOption {
+        id: "openai/gpt-oss-20b",
+        label: "GPT-OSS 20B",
+    },
+    UiModelOption {
+        id: MODEL_CUSTOM_ID,
+        label: "Custom model",
+    },
+];
+
+const OLLAMA_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "llama3.2",
+        label: "Llama 3.2",
+    },
+    UiModelOption {
+        id: "qwen2.5-coder:7b",
+        label: "Qwen 2.5 Coder 7B",
+    },
+    UiModelOption {
+        id: "mistral",
+        label: "Mistral",
+    },
+    UiModelOption {
+        id: MODEL_CUSTOM_ID,
+        label: "Custom model",
+    },
+];
+
+const CUSTOM_MODELS: &[UiModelOption] = &[UiModelOption {
+    id: MODEL_CUSTOM_ID,
+    label: "Custom model",
+}];
+
+const PROVIDER_PRESETS: &[UiProviderPreset] = &[
+    UiProviderPreset {
+        id: "openrouter",
+        label: "OpenRouter",
+        hint: "One key, many models",
+        route_editable: false,
+        route_placeholder: "openrouter",
+        default_model: DEFAULT_AI_MODEL,
+        default_auth: AUTH_MODE_API_KEY,
+        auth_options: &[AUTH_API_KEY],
+        models: OPENROUTER_MODELS,
+    },
+    UiProviderPreset {
+        id: "anthropic",
+        label: "Anthropic",
+        hint: "Claude direct",
+        route_editable: false,
+        route_placeholder: "anthropic",
+        default_model: "claude-sonnet-4-5-20250929",
+        default_auth: AUTH_MODE_API_KEY,
+        auth_options: &[AUTH_ANTHROPIC_KEY],
+        models: ANTHROPIC_MODELS,
+    },
+    UiProviderPreset {
+        id: "openai",
+        label: "OpenAI",
+        hint: "GPT direct",
+        route_editable: false,
+        route_placeholder: "openai",
+        default_model: "gpt-5.2",
+        default_auth: AUTH_MODE_API_KEY,
+        auth_options: &[AUTH_API_KEY],
+        models: OPENAI_MODELS,
+    },
+    UiProviderPreset {
+        id: "openai-codex",
+        label: "OpenAI Codex",
+        hint: "ChatGPT account",
+        route_editable: false,
+        route_placeholder: "openai-codex",
+        default_model: "gpt-5-codex",
+        default_auth: AUTH_MODE_DEVICE_LOGIN,
+        auth_options: &[AUTH_DEVICE_LOGIN],
+        models: OPENAI_CODEX_MODELS,
+    },
+    UiProviderPreset {
+        id: "gemini",
+        label: "Gemini",
+        hint: "Key or device login",
+        route_editable: false,
+        route_placeholder: "gemini",
+        default_model: "gemini-2.5-pro",
+        default_auth: AUTH_MODE_API_KEY,
+        auth_options: &[AUTH_API_KEY, AUTH_DEVICE_LOGIN],
+        models: GEMINI_MODELS,
+    },
+    UiProviderPreset {
+        id: "groq",
+        label: "Groq",
+        hint: "Fast inference",
+        route_editable: false,
+        route_placeholder: "groq",
+        default_model: "llama-3.3-70b-versatile",
+        default_auth: AUTH_MODE_API_KEY,
+        auth_options: &[AUTH_API_KEY],
+        models: GROQ_MODELS,
+    },
+    UiProviderPreset {
+        id: "ollama",
+        label: "Ollama",
+        hint: "Local on this device",
+        route_editable: false,
+        route_placeholder: "ollama",
+        default_model: "llama3.2",
+        default_auth: AUTH_MODE_LOCAL,
+        auth_options: &[AUTH_LOCAL],
+        models: OLLAMA_MODELS,
+    },
+    UiProviderPreset {
+        id: "custom",
+        label: "Custom",
+        hint: "OpenAI-compatible route",
+        route_editable: true,
+        route_placeholder: "custom:https://your-endpoint/v1",
+        default_model: "default",
+        default_auth: AUTH_MODE_NO_KEY,
+        auth_options: &[AUTH_NO_KEY, AUTH_API_KEY],
+        models: CUSTOM_MODELS,
+    },
 ];
 
 fn main() -> ExitCode {
@@ -145,21 +440,38 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
         ("POST", "/configure-ai") => {
             let fields = parse_form_urlencoded(&String::from_utf8_lossy(&request.body));
             let provider = resolve_provider(&fields);
-            let model = fields
-                .get("model")
+            let model = resolve_model(&fields);
+            let auth_mode = fields
+                .get("auth_mode")
                 .map(|value| value.trim())
-                .filter(|value| !value.is_empty());
+                .filter(|value| !value.is_empty())
+                .unwrap_or(AUTH_MODE_API_KEY);
             let submitted_api_key = fields
                 .get("api_key")
                 .map(|value| value.trim())
                 .unwrap_or("");
-            let api_key = if submitted_api_key.is_empty() && ai_configured(config) {
-                config.ai_api_key.as_deref().unwrap_or("")
-            } else {
-                submitted_api_key
+            let api_key = match resolve_ai_secret(config, &provider, auth_mode, submitted_api_key) {
+                Ok(api_key) => api_key,
+                Err(err) => {
+                    write_http_response(
+                        stream,
+                        "422 Unprocessable Entity",
+                        "text/html; charset=utf-8",
+                        render_home_page(
+                            layout,
+                            config,
+                            None,
+                            Some(&err.to_string()),
+                            None,
+                            None,
+                            None,
+                        )?,
+                    )?;
+                    return Ok(());
+                }
             };
 
-            match set_ai_profile(layout, &provider, model, api_key) {
+            match set_ai_profile(layout, &provider, model.as_deref(), api_key.as_deref()) {
                 Ok(_) => {
                     let updated_state = inspect_state(layout)?;
                     let updated_config =
@@ -174,15 +486,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                         stream,
                         "200 OK",
                         "text/html; charset=utf-8",
-                        render_home_page(
-                            layout,
-                            updated_config,
-                            Some("Claw is configured. You can start talking to the device now."),
-                            None,
-                            None,
-                            None,
-                            None,
-                        )?,
+                        render_home_page(layout, updated_config, None, None, None, None, None)?,
                     )?;
                 }
                 Err(err) => {
@@ -293,7 +597,7 @@ fn render_status_text(layout: &Layout, config: &ClawPiConfig) -> io::Result<Stri
 }
 
 fn render_home_page(
-    layout: &Layout,
+    _layout: &Layout,
     config: &ClawPiConfig,
     notice: Option<&str>,
     error: Option<&str>,
@@ -301,21 +605,8 @@ fn render_home_page(
     last_prompt: Option<&str>,
     answer: Option<&str>,
 ) -> io::Result<String> {
-    let hostname = device_hostname_label(&config.device_name);
-    let local_url = local_url_for_device_name(&config.device_name);
     let ai_ready = ai_configured(config);
-    let session_summary = read_optional_file(&layout.session_status_path())?;
-    let session_status = session_summary
-        .as_deref()
-        .and_then(|content| lookup_field(content, "status"))
-        .unwrap_or("absent");
-    let session_mode = session_summary
-        .as_deref()
-        .and_then(|content| lookup_field(content, "mode"))
-        .unwrap_or("unknown");
     let wifi_ssid = config.wifi_ssid.as_deref().unwrap_or("unset");
-    let ai_provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
-    let ai_model = config.ai_model.as_deref().unwrap_or(DEFAULT_AI_MODEL);
 
     let notice_html = notice
         .map(|value| format!("<p class=\"notice notice-ok\">{}</p>", escape_html(value)))
@@ -332,13 +623,7 @@ fn render_home_page(
     let body_html = if ai_ready {
         render_chat_view(
             config,
-            &hostname,
-            &local_url,
             wifi_ssid,
-            ai_provider,
-            ai_model,
-            session_status,
-            session_mode,
             &notice_html,
             &error_html,
             draft_prompt,
@@ -346,14 +631,7 @@ fn render_home_page(
             answer,
         )
     } else {
-        render_setup_view(
-            config,
-            &hostname,
-            &local_url,
-            wifi_ssid,
-            &notice_html,
-            &error_html,
-        )
+        render_setup_view(config, wifi_ssid, &notice_html, &error_html)
     };
 
     Ok(render_document(&config.device_name, &body_html))
@@ -361,65 +639,29 @@ fn render_home_page(
 
 fn render_setup_view(
     config: &ClawPiConfig,
-    hostname: &str,
-    local_url: &str,
     wifi_ssid: &str,
     notice_html: &str,
     error_html: &str,
 ) -> String {
-    let ai_form = render_ai_form(
-        config,
-        "Save AI Configuration",
-        "sk-...",
-        true,
-        true,
-        "This credential stays on the device and is handed into the embedded ZeroClaw runtime.",
-    );
+    let ai_form = render_ai_form(config, "setup-ai", "Continue", "setup", true);
+    let device_menu = render_device_menu(config, wifi_ssid);
 
     format!(
-        "<section class=\"shell\">\
-           <header class=\"shell-header\">\
-             <div class=\"brand-row\">\
-               <div>\
-                 <p class=\"eyebrow\">ClawPi local console</p>\
-                 <h1>{device_name}</h1>\
-                 <p class=\"lede\">Wi-Fi is done. The next OS step is attaching the AI runtime that powers this device's local Claw console.</p>\
-               </div>\
-             </div>\
-             <div class=\"chips\">\
-               <span class=\"chip\">{hostname}.local</span>\
-               <span class=\"chip\">{wifi_ssid}</span>\
-               <span class=\"chip\">setup handoff</span>\
-             </div>\
+        "<section class=\"page-shell\">\
+           <header class=\"page-topbar\">\
+             <div class=\"wordmark\">ClawPi</div>\
+             {device_menu}\
            </header>\
-           <div class=\"surface\">\
+           <div class=\"setup-wrap\">\
              {notice_html}\
              {error_html}\
-             <div class=\"setup-grid\">\
-               <section class=\"panel intro-panel\">\
-                 <p class=\"eyebrow\">Finish onboarding</p>\
-                 <h2>Configure Claw</h2>\
-                 <p>This browser handoff should stay narrow: choose the ZeroClaw provider, model, and credential, then switch into a single prompt surface at <strong>{local_url}</strong>.</p>\
-                 <div class=\"meta-stack\">\
-                   <div class=\"meta-row\"><span>Device</span><strong>{device_name}</strong></div>\
-                   <div class=\"meta-row\"><span>Hostname</span><strong>{hostname}.local</strong></div>\
-                   <div class=\"meta-row\"><span>Wi-Fi</span><strong>{wifi_ssid}</strong></div>\
-                 </div>\
-                 <p class=\"supporting-copy\">Richer on-device tool execution and OS actions can layer into this console later, but the surface should already feel simple and native from day one.</p>\
-               </section>\
-               <section class=\"panel form-panel\">\
-                 <p class=\"eyebrow\">AI runtime</p>\
-                 <h2>Configure the runtime</h2>\
-                 <p>This setup contract now feeds the embedded ZeroClaw runtime directly. Pick the provider you want the device to use, then adjust it later from inside the console.</p>\
-                 {ai_form}\
-               </section>\
-             </div>\
+             <section class=\"setup-card\">\
+               <h1>Pick an AI provider</h1>\
+               {ai_form}\
+             </section>\
            </div>\
          </section>",
-        device_name = escape_html(&config.device_name),
-        hostname = escape_html(hostname),
-        local_url = escape_html(local_url),
-        wifi_ssid = escape_html(wifi_ssid),
+        device_menu = device_menu,
         notice_html = notice_html,
         error_html = error_html,
         ai_form = ai_form,
@@ -428,101 +670,43 @@ fn render_setup_view(
 
 fn render_chat_view(
     config: &ClawPiConfig,
-    hostname: &str,
-    local_url: &str,
     wifi_ssid: &str,
-    ai_provider: &str,
-    ai_model: &str,
-    session_status: &str,
-    session_mode: &str,
     notice_html: &str,
     error_html: &str,
     draft_prompt: Option<&str>,
     last_prompt: Option<&str>,
     answer: Option<&str>,
 ) -> String {
-    let ai_form = render_ai_form(
-        config,
-        "Update AI Configuration",
-        "Leave blank to keep the current key",
-        false,
-        false,
-        "Leave the key blank to keep the current secret. Re-enter it only when rotating credentials.",
-    );
+    let ai_form = render_ai_form(config, "console-ai", "Save", "update", false);
     let transcript_html = render_transcript(last_prompt, answer);
+    let device_menu = render_device_menu(config, wifi_ssid);
 
     format!(
-        "<section class=\"shell\">\
-           <header class=\"shell-header\">\
-             <div class=\"brand-row\">\
-               <div>\
-                 <p class=\"eyebrow\">ClawPi local console</p>\
-                 <h1>{device_name}</h1>\
-                 <p class=\"lede\">A focused local prompt surface for talking to this device without a dashboard wrapped around it.</p>\
-               </div>\
-             </div>\
-             <div class=\"chips\">\
-               <span class=\"chip\">{hostname}.local</span>\
-               <span class=\"chip\">{wifi_ssid}</span>\
-               <span class=\"chip\">{ai_provider} / {ai_model}</span>\
-             </div>\
+        "<section class=\"page-shell\">\
+           <header class=\"page-topbar\">\
+             <div class=\"wordmark\">ClawPi</div>\
+             {device_menu}\
            </header>\
-           <div class=\"console-body\">\
+           <div class=\"console-wrap\">\
              {notice_html}\
              {error_html}\
-             <details class=\"details-toggle\">\
-               <summary>\
-                 <span>AI settings and device details</span>\
-                 <span class=\"summary-copy\">edit the model, rotate the key, or inspect the local handoff state</span>\
-               </summary>\
-               <div class=\"details-content\">\
-                 <section class=\"panel details-panel\">\
-                   <p class=\"eyebrow\">AI runtime</p>\
-                   <h2>Adjust the console</h2>\
-                   <p>These settings stay tucked away so the main surface can behave like a normal agent console.</p>\
-                   {ai_form}\
-                 </section>\
-                 <section class=\"panel details-panel\">\
-                   <p class=\"eyebrow\">Device</p>\
-                   <h2>Local context</h2>\
-                   <div class=\"meta-stack\">\
-                     <div class=\"meta-row\"><span>Local URL</span><strong>{local_url}</strong></div>\
-                     <div class=\"meta-row\"><span>Hostname</span><strong>{hostname}.local</strong></div>\
-                     <div class=\"meta-row\"><span>Wi-Fi</span><strong>{wifi_ssid}</strong></div>\
-                     <div class=\"meta-row\"><span>Runtime</span><strong>{session_status}</strong></div>\
-                     <div class=\"meta-row\"><span>Mode</span><strong>{session_mode}</strong></div>\
-                   </div>\
-                 </section>\
-               </div>\
-             </details>\
-             <section class=\"transcript-shell\">\
-               <div class=\"panel-heading\">\
-                 <div>\
-                   <p class=\"eyebrow\">Agent session</p>\
-                   <h2>Ask Claw</h2>\
-                 </div>\
-                 <p class=\"panel-note\">One question in, one answer back. Keep the surface small while the deeper runtime comes online.</p>\
-               </div>\
+             <section class=\"console-card\">\
                <div class=\"transcript\">{transcript_html}</div>\
                <form method=\"post\" action=\"/prompt\" class=\"composer\">\
                  <label class=\"visually-hidden\" for=\"prompt\">Message Claw</label>\
-                 <textarea id=\"prompt\" name=\"prompt\" rows=\"4\" class=\"composer-box\" placeholder=\"Ask a question about this device or what you want it to do next.\" autofocus>{draft_prompt}</textarea>\
+                 <textarea id=\"prompt\" name=\"prompt\" rows=\"4\" class=\"composer-box\" placeholder=\"Ask Claw anything.\" autofocus>{draft_prompt}</textarea>\
                  <div class=\"composer-row\">\
-                   <p class=\"composer-note\">Claw replies through the local agent service running on this device.</p>\
                    <button type=\"submit\">Send</button>\
                  </div>\
                </form>\
+               <details class=\"settings-drawer\">\
+                 <summary>AI</summary>\
+                 {ai_form}\
+               </details>\
              </section>\
            </div>\
          </section>",
-        device_name = escape_html(&config.device_name),
-        hostname = escape_html(hostname),
-        local_url = escape_html(local_url),
-        wifi_ssid = escape_html(wifi_ssid),
-        ai_provider = escape_html(ai_provider),
-        ai_model = escape_html(ai_model),
-        session_status = escape_html(session_status),
-        session_mode = escape_html(session_mode),
+        device_menu = device_menu,
         notice_html = notice_html,
         error_html = error_html,
         ai_form = ai_form,
@@ -533,34 +717,103 @@ fn render_chat_view(
 
 fn render_ai_form(
     config: &ClawPiConfig,
+    form_id: &str,
     submit_label: &str,
-    api_key_placeholder: &str,
-    api_key_required: bool,
-    autofocus_api_key: bool,
-    helper_copy: &str,
+    form_mode: &str,
+    autofocus_provider: bool,
 ) -> String {
-    let required_attr = if api_key_required { " required" } else { "" };
-    let autofocus_attr = if autofocus_api_key { " autofocus" } else { "" };
-    let selected_provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
-    let provider_picker = render_provider_picker(selected_provider);
+    let provider_label = config
+        .ai_provider
+        .as_deref()
+        .and_then(find_provider_preset)
+        .map(|preset| preset.label)
+        .unwrap_or("Select provider");
+    let model_label = config
+        .ai_provider
+        .as_deref()
+        .zip(config.ai_model.as_deref())
+        .and_then(|(provider, model)| model_label_for(provider, model))
+        .unwrap_or("Select model");
+    let provider_autofocus = if autofocus_provider { " autofocus" } else { "" };
+    let provider_options = render_provider_picker_options();
+    let initial_provider = config.ai_provider.as_deref().unwrap_or("");
+    let initial_model = config.ai_model.as_deref().unwrap_or("");
+    let initial_has_secret = config
+        .ai_api_key
+        .as_deref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let api_key_placeholder = if form_mode == "update" && initial_has_secret {
+        "Current key saved"
+    } else {
+        "sk-..."
+    };
 
     format!(
-        "<form method=\"post\" action=\"/configure-ai\" class=\"config-form\">\
-           {provider_picker}\
-           <label for=\"model\">Model</label>\
-           <input id=\"model\" name=\"model\" value=\"{model}\" placeholder=\"{default_model}\" spellcheck=\"false\">\
-           <label for=\"api_key\">Credential</label>\
-           <input id=\"api_key\" name=\"api_key\" type=\"password\" placeholder=\"{api_key_placeholder}\" autocomplete=\"off\" spellcheck=\"false\"{required_attr}{autofocus_attr}>\
-           <p class=\"form-note\">{helper_copy}</p>\
+        "<form method=\"post\" action=\"/configure-ai\" class=\"ai-config-form\" data-form-mode=\"{form_mode}\" data-initial-provider=\"{initial_provider}\" data-initial-model=\"{initial_model}\" data-initial-has-secret=\"{initial_has_secret}\">\
+           <input type=\"hidden\" name=\"provider_preset\" value=\"\">\
+           <input type=\"hidden\" name=\"provider_value\" value=\"\">\
+           <input type=\"hidden\" name=\"auth_mode\" value=\"\">\
+           <input type=\"hidden\" name=\"model\" value=\"\">\
+           <div class=\"flow-stack\">\
+             <button type=\"button\" class=\"select-card\" data-open-picker=\"provider\"{provider_autofocus}>\
+               <span class=\"field-kicker\">Provider</span>\
+               <strong data-provider-label>{provider_label}</strong>\
+             </button>\
+             <div class=\"field-shell is-hidden\" data-field=\"route\">\
+               <label for=\"{form_id}-provider-custom\">Provider route</label>\
+               <input id=\"{form_id}-provider-custom\" name=\"provider_custom\" value=\"{initial_provider}\" placeholder=\"custom:https://your-endpoint/v1\" spellcheck=\"false\" autocapitalize=\"off\">\
+             </div>\
+             <div class=\"field-shell is-hidden\" data-field=\"auth\">\
+               <div class=\"choice-strip\" data-auth-options></div>\
+             </div>\
+             <div class=\"field-shell is-hidden\" data-field=\"credential\">\
+               <label for=\"{form_id}-api-key\" data-credential-label>API key</label>\
+               <input id=\"{form_id}-api-key\" name=\"api_key\" type=\"password\" placeholder=\"{api_key_placeholder}\" autocomplete=\"off\" spellcheck=\"false\">\
+             </div>\
+             <button type=\"button\" class=\"select-card is-hidden\" data-field=\"model\" data-open-picker=\"model\">\
+               <span class=\"field-kicker\">Model</span>\
+               <strong data-model-label>{model_label}</strong>\
+             </button>\
+             <div class=\"field-shell is-hidden\" data-field=\"custom-model\">\
+               <label for=\"{form_id}-model-custom\">Custom model</label>\
+               <input id=\"{form_id}-model-custom\" name=\"model_custom\" value=\"{initial_model}\" placeholder=\"model-id\" spellcheck=\"false\" autocapitalize=\"off\">\
+             </div>\
+           </div>\
+           <div class=\"picker-sheet is-hidden\" data-picker=\"provider\">\
+             <div class=\"picker-panel\">\
+               <div class=\"picker-head\">\
+                 <span>Pick a provider</span>\
+                 <button type=\"button\" class=\"picker-close\" data-close-picker aria-label=\"Close\">Close</button>\
+               </div>\
+               <input type=\"search\" class=\"picker-search\" data-picker-search placeholder=\"Search providers\">\
+               <div class=\"picker-list\" data-picker-list>\
+                 {provider_options}\
+               </div>\
+             </div>\
+           </div>\
+           <div class=\"picker-sheet is-hidden\" data-picker=\"model\">\
+             <div class=\"picker-panel\">\
+               <div class=\"picker-head\">\
+                 <span>Pick a model</span>\
+                 <button type=\"button\" class=\"picker-close\" data-close-picker aria-label=\"Close\">Close</button>\
+               </div>\
+               <input type=\"search\" class=\"picker-search\" data-model-search placeholder=\"Search models\">\
+               <div class=\"picker-list\" data-model-options></div>\
+             </div>\
+           </div>\
            <button type=\"submit\">{submit_label}</button>\
          </form>",
-        provider_picker = provider_picker,
-        model = escape_html(config.ai_model.as_deref().unwrap_or(DEFAULT_AI_MODEL)),
-        default_model = DEFAULT_AI_MODEL,
+        form_mode = escape_html(form_mode),
+        initial_provider = escape_html(initial_provider),
+        initial_model = escape_html(initial_model),
+        initial_has_secret = if initial_has_secret { "true" } else { "false" },
+        provider_autofocus = provider_autofocus,
+        provider_label = escape_html(provider_label),
+        form_id = escape_html(form_id),
         api_key_placeholder = escape_html(api_key_placeholder),
-        required_attr = required_attr,
-        autofocus_attr = autofocus_attr,
-        helper_copy = escape_html(helper_copy),
+        model_label = escape_html(model_label),
+        provider_options = provider_options,
         submit_label = escape_html(submit_label),
     )
 }
@@ -589,94 +842,164 @@ fn render_transcript(last_prompt: Option<&str>, answer: Option<&str>) -> String 
         (None, _) => String::from(
             "<article class=\"message message-assistant message-empty\">\
                <span class=\"message-label\">Claw</span>\
-               Claw is configured on this device. Ask what you want explained, what task you want help with, or what this Pi should do next.\
+               Ask Claw anything.\
              </article>",
         ),
     }
 }
 
-fn resolve_provider(fields: &HashMap<String, String>) -> String {
-    let provider_preset = fields
-        .get("provider_preset")
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty());
-    let provider_custom = fields
-        .get("provider_custom")
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty());
-    let legacy_provider = fields
-        .get("provider")
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty());
-
-    match provider_preset {
-        Some("custom") => provider_custom
-            .or(legacy_provider)
-            .unwrap_or(DEFAULT_AI_PROVIDER)
-            .to_string(),
-        Some(value) => value.to_string(),
-        None => legacy_provider
-            .or(provider_custom)
-            .unwrap_or(DEFAULT_AI_PROVIDER)
-            .to_string(),
-    }
-}
-
-fn render_provider_picker(selected_provider: &str) -> String {
-    let selected_preset = provider_preset_for(selected_provider);
-    let custom_value = if selected_preset == "custom" {
-        selected_provider
-    } else {
-        ""
-    };
-    let options = PROVIDER_PRESETS
-        .iter()
-        .map(|(value, label)| {
-            let selected_attr = if *value == selected_preset {
-                " selected"
-            } else {
-                ""
-            };
-            format!(
-                "<option value=\"{value}\"{selected_attr}>{label}</option>",
-                value = value,
-                selected_attr = selected_attr,
-                label = escape_html(label),
-            )
-        })
-        .collect::<String>();
-    let custom_selected_attr = if selected_preset == "custom" {
-        " selected"
-    } else {
-        ""
-    };
-
+fn render_device_menu(config: &ClawPiConfig, wifi_ssid: &str) -> String {
     format!(
-        "<label for=\"provider_preset\">Provider</label>\
-         <select id=\"provider_preset\" name=\"provider_preset\">\
-           {options}\
-           <option value=\"custom\"{custom_selected_attr}>Custom route</option>\
-         </select>\
-         <p class=\"form-note\">Use a ZeroClaw-friendly preset for the common cases, or switch to Custom route when the embedded runtime should use a provider string that ClawPi does not need to hard-code.</p>\
-         <label for=\"provider_custom\">Custom provider route</label>\
-         <input id=\"provider_custom\" name=\"provider_custom\" value=\"{custom_value}\" placeholder=\"openrouter:my-gateway\" spellcheck=\"false\" autocapitalize=\"off\">\
-         <p class=\"form-note\">Only used when Custom route is selected.</p>",
-        options = options,
-        custom_selected_attr = custom_selected_attr,
-        custom_value = escape_html(custom_value),
+        "<details class=\"device-menu\">\
+           <summary>Device</summary>\
+           <div class=\"device-popover\">\
+             <div class=\"device-row\"><span>Name</span><strong>{device_name}</strong></div>\
+             <div class=\"device-row\"><span>Wi-Fi</span><strong>{wifi_ssid}</strong></div>\
+           </div>\
+         </details>",
+        device_name = escape_html(&config.device_name),
+        wifi_ssid = escape_html(wifi_ssid),
     )
 }
 
-fn provider_preset_for(provider: &str) -> &'static str {
+fn render_provider_picker_options() -> String {
+    PROVIDER_PRESETS
+        .iter()
+        .map(|preset| {
+            format!(
+                "<button type=\"button\" class=\"picker-option\" data-provider-id=\"{id}\" data-searchable=\"{searchable}\">\
+                   <strong>{label}</strong>\
+                 </button>",
+                id = preset.id,
+                searchable = escape_html(&format!("{} {}", preset.label, preset.hint)),
+                label = escape_html(preset.label),
+            )
+        })
+        .collect()
+}
+
+fn resolve_provider(fields: &HashMap<String, String>) -> String {
+    fields
+        .get("provider_value")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            fields
+                .get("provider_custom")
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+        })
+        .or_else(|| {
+            fields
+                .get("provider")
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or(DEFAULT_AI_PROVIDER)
+        .to_string()
+}
+
+fn resolve_model(fields: &HashMap<String, String>) -> Option<String> {
+    fields
+        .get("model")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            fields
+                .get("model_custom")
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+        })
+        .or_else(|| {
+            fields
+                .get("model_value")
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+        })
+        .map(String::from)
+}
+
+fn resolve_ai_secret(
+    config: &ClawPiConfig,
+    provider: &str,
+    auth_mode: &str,
+    submitted_secret: &str,
+) -> io::Result<Option<String>> {
+    let trimmed_secret = submitted_secret.trim();
+    PROVIDER_PRESETS
+        .iter()
+        .find(|preset| provider.eq_ignore_ascii_case(preset.id))
+        .and_then(|preset| {
+            preset
+                .auth_options
+                .iter()
+                .find(|option| option.id == auth_mode)
+                .copied()
+        })
+        .map_or_else(
+            || match auth_mode {
+                AUTH_MODE_DEVICE_LOGIN | AUTH_MODE_LOCAL | AUTH_MODE_NO_KEY => Ok(None),
+                _ if !trimmed_secret.is_empty() => Ok(Some(trimmed_secret.to_string())),
+                _ => Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Enter a key to continue.",
+                )),
+            },
+            |auth_option| {
+                if auth_option.requires_secret {
+                    if !trimmed_secret.is_empty() {
+                        return Ok(Some(trimmed_secret.to_string()));
+                    }
+
+                    let can_reuse_secret = config
+                        .ai_provider
+                        .as_deref()
+                        .is_some_and(|current| current == provider)
+                        && config
+                            .ai_api_key
+                            .as_deref()
+                            .is_some_and(|value| !value.trim().is_empty());
+
+                    if can_reuse_secret {
+                        Ok(config.ai_api_key.clone())
+                    } else {
+                        Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "Enter a key to continue.",
+                        ))
+                    }
+                } else {
+                    Ok(None)
+                }
+            },
+        )
+}
+
+fn find_provider_preset(provider: &str) -> Option<&'static UiProviderPreset> {
     let normalized = provider.trim();
     PROVIDER_PRESETS
         .iter()
-        .find(|(value, _)| normalized.eq_ignore_ascii_case(value))
-        .map(|(value, _)| *value)
-        .unwrap_or("custom")
+        .find(|preset| normalized.eq_ignore_ascii_case(preset.id))
+}
+
+fn model_label_for(provider: &str, model: &str) -> Option<&'static str> {
+    let preset = find_provider_preset(provider)?;
+    preset
+        .models
+        .iter()
+        .find(|option| option.id == model)
+        .map(|option| option.label)
+}
+
+fn render_provider_catalog_json() -> String {
+    serde_json::to_string(PROVIDER_PRESETS)
+        .unwrap_or_else(|_| String::from("[]"))
+        .replace('<', "\\u003c")
 }
 
 fn render_document(device_name: &str, body_html: &str) -> String {
+    let provider_catalog_json = render_provider_catalog_json();
+    let ui_script = render_ui_script();
     format!(
         "<!doctype html>\
 <html lang=\"en\">\
@@ -693,7 +1016,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
       --muted: #536159;\
       --line: rgba(23, 33, 28, 0.11);\
       --surface: rgba(248, 244, 236, 0.74);\
-      --surface-strong: rgba(255, 255, 255, 0.82);\
+      --surface-strong: rgba(255, 255, 255, 0.88);\
       --chip: rgba(23, 33, 28, 0.06);\
       --accent: #1f5b42;\
       --accent-strong: #163d2d;\
@@ -717,82 +1040,31 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     main {{\
       position: relative;\
       min-height: 100vh;\
-      max-width: 72rem;\
+      max-width: 56rem;\
       margin: 0 auto;\
-      padding: 1.5rem 1rem 2rem;\
+      padding: 1rem;\
       display: grid;\
     }}\
-    h1 {{ margin: 0; font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 0.98; letter-spacing: -0.05em; }}\
-    h2 {{ margin: 0; font-size: 1.4rem; line-height: 1.1; letter-spacing: -0.03em; }}\
-    p {{ margin: 0; line-height: 1.6; }}\
+    h1 {{ margin: 0; font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1; letter-spacing: -0.05em; }}\
+    p {{ margin: 0; line-height: 1.5; }}\
     strong {{ font-weight: 700; }}\
-    .shell {{\
-      align-self: stretch;\
+    .page-shell {{ display: grid; gap: 1rem; align-content: start; }}\
+    .page-topbar {{ display: flex; justify-content: space-between; align-items: start; gap: 1rem; }}\
+    .wordmark {{ font-size: 1rem; font-weight: 700; letter-spacing: -0.03em; }}\
+    .setup-wrap {{ display: grid; gap: 0.9rem; min-height: calc(100vh - 5rem); align-content: center; }}\
+    .console-wrap {{ display: grid; gap: 0.9rem; }}\
+    .setup-card, .console-card {{\
       border: 1px solid var(--line);\
-      border-radius: 1.85rem;\
-      background: var(--surface);\
-      backdrop-filter: blur(18px);\
-      box-shadow: 0 1.5rem 4rem rgba(15, 23, 18, 0.14);\
-      overflow: hidden;\
-      animation: rise 0.42s ease;\
-    }}\
-    .shell-header {{\
-      padding: 1.35rem 1.4rem 1.15rem;\
-      background: linear-gradient(180deg, rgba(255,255,255,0.48), rgba(255,255,255,0.14));\
-      border-bottom: 1px solid var(--line);\
-    }}\
-    .surface, .console-body {{ padding: 1.2rem 1.4rem 1.4rem; }}\
-    .brand-row {{ display: flex; justify-content: space-between; gap: 1rem; align-items: start; }}\
-    .chips {{ display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 1rem; }}\
-    .chip {{\
-      display: inline-flex;\
-      align-items: center;\
-      gap: 0.35rem;\
-      padding: 0.48rem 0.72rem;\
-      border-radius: 999px;\
-      background: var(--chip);\
-      border: 1px solid rgba(23, 33, 28, 0.06);\
-      font: 600 0.8rem/1 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
-      color: var(--muted);\
-    }}\
-    .chip-quiet {{ background: rgba(23, 33, 28, 0.04); }}\
-    .eyebrow {{\
-      margin-bottom: 0.55rem;\
-      font: 700 0.78rem/1 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
-      text-transform: uppercase;\
-      letter-spacing: 0.14em;\
-      color: var(--muted);\
-    }}\
-    .lede {{ max-width: 42rem; margin-top: 0.7rem; color: var(--muted); }}\
-    .setup-grid {{ display: grid; gap: 1rem; grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr); margin-top: 1rem; }}\
-    .panel {{\
-      padding: 1.2rem;\
-      border-radius: 1.35rem;\
+      border-radius: 1.6rem;\
       background: var(--surface-strong);\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);\
+      box-shadow: 0 1.5rem 4rem rgba(15, 23, 18, 0.12);\
+      padding: 1.1rem;\
+      backdrop-filter: blur(18px);\
+      animation: rise 0.32s ease;\
     }}\
-    .intro-panel, .details-panel {{ display: grid; gap: 0.9rem; align-content: start; }}\
-    .supporting-copy, .panel-note, .form-note, .composer-note, .summary-copy, .provider-note {{ color: var(--muted); }}\
-    .panel-note {{ max-width: 28rem; text-align: right; font-size: 0.93rem; }}\
-    .meta-stack {{ display: grid; gap: 0.7rem; }}\
-    .meta-row {{\
-      display: flex;\
-      justify-content: space-between;\
-      align-items: center;\
-      gap: 1rem;\
-      padding: 0.85rem 0.95rem;\
-      border-radius: 1rem;\
-      background: rgba(23, 33, 28, 0.045);\
-    }}\
-    .meta-row span {{ color: var(--muted); }}\
-    .meta-row strong {{\
-      font: 600 0.92rem/1.4 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
-      text-align: right;\
-      word-break: break-word;\
-    }}\
-    .config-form, .composer {{ display: grid; gap: 0.88rem; margin-top: 1rem; }}\
-    label {{\
+    .setup-card {{ display: grid; gap: 1rem; max-width: 34rem; width: 100%; margin: 0 auto; }}\
+    .console-card {{ display: grid; gap: 1rem; }}\
+    label, .field-kicker {{\
       display: block;\
       font: 700 0.78rem/1 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
       text-transform: uppercase;\
@@ -814,19 +1086,23 @@ fn render_document(device_name: &str, body_html: &str) -> String {
       outline-offset: 2px;\
       border-color: rgba(31, 91, 66, 0.35);\
     }}\
-    textarea {{ resize: vertical; min-height: 6.8rem; }}\
-    .composer-box {{ min-height: 7rem; }}\
-    .provider-card {{\
+    textarea {{ resize: vertical; min-height: 6rem; }}\
+    .flow-stack {{ display: grid; gap: 0.85rem; }}\
+    .field-shell {{ display: grid; gap: 0.55rem; }}\
+    .select-card {{\
+      width: 100%;\
       display: flex;\
-      justify-content: space-between;\
-      gap: 1rem;\
-      align-items: center;\
-      padding: 0.9rem 1rem;\
+      flex-direction: column;\
+      align-items: start;\
+      gap: 0.45rem;\
+      padding: 0.95rem 1rem;\
       border-radius: 1rem;\
-      border: 1px solid rgba(23, 33, 28, 0.08);\
-      background: rgba(255, 255, 255, 0.68);\
+      border: 1px solid #c3cfc3;\
+      background: rgba(255, 255, 255, 0.92);\
+      color: var(--ink);\
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);\
+      text-align: left;\
     }}\
-    .provider-name {{ font-weight: 700; }}\
     button {{\
       border: 0;\
       border-radius: 999px;\
@@ -839,44 +1115,46 @@ fn render_document(device_name: &str, body_html: &str) -> String {
       transition: background 140ms ease, transform 140ms ease;\
     }}\
     button:hover {{ background: var(--accent-strong); transform: translateY(-1px); }}\
-    .notice {{ margin-top: 1rem; padding: 0.95rem 1rem; border-radius: 1rem; border: 1px solid transparent; }}\
+    .notice {{ padding: 0.95rem 1rem; border-radius: 1rem; border: 1px solid transparent; }}\
     .notice-ok {{ background: rgba(220, 243, 228, 0.95); color: #12482f; border-color: rgba(18, 72, 47, 0.12); }}\
     .notice-error {{ background: rgba(255, 230, 220, 0.96); color: #7a2a19; border-color: rgba(122, 42, 25, 0.12); }}\
-    .details-toggle {{\
-      border-radius: 1.2rem;\
-      background: rgba(255, 255, 255, 0.42);\
+    .choice-strip {{ display: flex; flex-wrap: wrap; gap: 0.55rem; }}\
+    .choice-pill {{\
+      background: rgba(23, 33, 28, 0.05);\
+      color: var(--ink);\
+      border: 1px solid rgba(23, 33, 28, 0.08);\
+      padding: 0.78rem 0.95rem;\
+    }}\
+    .choice-pill.is-active {{ background: var(--accent); color: #fff; border-color: transparent; }}\
+    .settings-drawer {{\
+      border-radius: 1rem;\
       border: 1px solid rgba(23, 33, 28, 0.08);\
       overflow: hidden;\
+      background: rgba(255, 255, 255, 0.45);\
     }}\
-    .details-toggle summary {{\
+    .settings-drawer summary {{\
       list-style: none;\
       cursor: pointer;\
-      display: flex;\
-      justify-content: space-between;\
-      align-items: center;\
-      gap: 1rem;\
-      padding: 1rem 1.1rem;\
+      padding: 0.95rem 1rem;\
       font-weight: 700;\
     }}\
-    .details-toggle summary::-webkit-details-marker {{ display: none; }}\
-    .details-toggle[open] summary {{ border-bottom: 1px solid rgba(23, 33, 28, 0.08); }}\
-    .details-content {{ display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr); padding: 1rem; }}\
-    .transcript-shell {{ display: grid; gap: 1rem; }}\
-    .panel-heading {{ display: flex; justify-content: space-between; gap: 1rem; align-items: end; }}\
+    .settings-drawer summary::-webkit-details-marker {{ display: none; }}\
+    .settings-drawer[open] {{ padding-bottom: 1rem; }}\
+    .settings-drawer[open] summary {{ margin-bottom: 0.4rem; }}\
     .transcript {{\
       display: grid;\
       gap: 0.85rem;\
-      min-height: 20rem;\
-      padding: 1.05rem;\
-      border-radius: 1.35rem;\
+      min-height: 16rem;\
+      padding: 0.95rem;\
+      border-radius: 1.1rem;\
       border: 1px solid rgba(23, 33, 28, 0.08);\
       background: rgba(23, 33, 28, 0.045);\
     }}\
     .message {{\
-      max-width: 50rem;\
-      padding: 1rem 1.05rem;\
-      border-radius: 1.15rem;\
-      line-height: 1.65;\
+      max-width: 44rem;\
+      padding: 0.95rem 1rem;\
+      border-radius: 1rem;\
+      line-height: 1.6;\
       white-space: pre-wrap;\
       overflow-wrap: anywhere;\
     }}\
@@ -891,7 +1169,78 @@ fn render_document(device_name: &str, body_html: &str) -> String {
       letter-spacing: 0.12em;\
       color: var(--muted);\
     }}\
-    .composer-row {{ display: flex; justify-content: space-between; gap: 1rem; align-items: center; }}\
+    .composer {{ display: grid; gap: 0.8rem; }}\
+    .composer-row {{ display: flex; justify-content: flex-end; gap: 1rem; align-items: center; }}\
+    .device-menu {{ position: relative; }}\
+    .device-menu summary {{\
+      list-style: none;\
+      cursor: pointer;\
+      padding: 0.68rem 0.92rem;\
+      border-radius: 999px;\
+      background: rgba(255, 255, 255, 0.82);\
+      border: 1px solid rgba(23, 33, 28, 0.08);\
+      font: 700 0.78rem/1 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace;\
+      color: var(--muted);\
+    }}\
+    .device-menu summary::-webkit-details-marker {{ display: none; }}\
+    .device-popover {{\
+      position: absolute;\
+      top: calc(100% + 0.6rem);\
+      right: 0;\
+      min-width: 14rem;\
+      display: grid;\
+      gap: 0.55rem;\
+      padding: 0.8rem;\
+      border-radius: 1rem;\
+      background: rgba(255, 255, 255, 0.96);\
+      border: 1px solid rgba(23, 33, 28, 0.08);\
+      box-shadow: 0 1rem 2.6rem rgba(15, 23, 18, 0.16);\
+    }}\
+    .device-row {{ display: flex; justify-content: space-between; gap: 1rem; align-items: center; }}\
+    .device-row span {{ color: var(--muted); }}\
+    .device-row strong {{ font: 600 0.9rem/1.4 \"IBM Plex Mono\", \"SFMono-Regular\", Menlo, monospace; text-align: right; }}\
+    .picker-sheet {{\
+      position: fixed;\
+      inset: 0;\
+      display: grid;\
+      place-items: center;\
+      padding: 1rem;\
+      background: rgba(23, 33, 28, 0.2);\
+      z-index: 10;\
+    }}\
+    .picker-panel {{\
+      width: min(32rem, 100%);\
+      max-height: min(70vh, 36rem);\
+      display: grid;\
+      gap: 0.8rem;\
+      padding: 1rem;\
+      border-radius: 1.2rem;\
+      background: rgba(255, 255, 255, 0.98);\
+      border: 1px solid rgba(23, 33, 28, 0.08);\
+      box-shadow: 0 1.5rem 4rem rgba(15, 23, 18, 0.16);\
+    }}\
+    .picker-head {{ display: flex; justify-content: space-between; gap: 1rem; align-items: center; font-weight: 700; }}\
+    .picker-close {{\
+      background: rgba(23, 33, 28, 0.06);\
+      color: var(--ink);\
+      border: 1px solid rgba(23, 33, 28, 0.08);\
+      padding: 0.65rem 0.95rem;\
+    }}\
+    .picker-list {{ display: grid; gap: 0.55rem; overflow: auto; padding-right: 0.2rem; }}\
+    .picker-option {{\
+      width: 100%;\
+      display: grid;\
+      gap: 0.22rem;\
+      justify-items: start;\
+      padding: 0.92rem 1rem;\
+      border-radius: 1rem;\
+      background: rgba(23, 33, 28, 0.04);\
+      color: var(--ink);\
+      border: 1px solid rgba(23, 33, 28, 0.08);\
+      text-align: left;\
+    }}\
+    .picker-option span {{ color: var(--muted); font-size: 0.94rem; }}\
+    .is-hidden {{ display: none !important; }}\
     .visually-hidden {{\
       position: absolute;\
       width: 1px;\
@@ -904,17 +1253,11 @@ fn render_document(device_name: &str, body_html: &str) -> String {
       border: 0;\
     }}\
     @keyframes rise {{ from {{ opacity: 0; transform: translateY(16px); }} to {{ opacity: 1; transform: none; }} }}\
-    @media (max-width: 900px) {{\
-      .setup-grid, .details-content {{ grid-template-columns: 1fr; }}\
-      .panel-heading {{ align-items: start; flex-direction: column; }}\
-      .panel-note {{ text-align: left; max-width: none; }}\
-    }}\
     @media (max-width: 760px) {{\
-      main {{ padding: 0.85rem 0.75rem 1.25rem; }}\
-      .shell-header, .surface, .console-body {{ padding: 1rem; }}\
-      .brand-row, .composer-row, .details-toggle summary {{ flex-direction: column; align-items: start; }}\
-      .meta-row {{ flex-direction: column; align-items: start; }}\
-      .meta-row strong {{ text-align: left; }}\
+      main {{ padding: 0.75rem; }}\
+      .page-topbar {{ align-items: center; }}\
+      .setup-card, .console-card {{ padding: 0.95rem; border-radius: 1.25rem; }}\
+      .device-popover {{ position: fixed; top: 4.2rem; right: 0.75rem; left: 0.75rem; min-width: 0; }}\
       button {{ width: 100%; }}\
       .message {{ max-width: none; }}\
     }}\
@@ -922,10 +1265,386 @@ fn render_document(device_name: &str, body_html: &str) -> String {
 </head>\
 <body>\
   <main>{body_html}</main>\
+  <script type=\"application/json\" id=\"clawpi-provider-catalog\">{provider_catalog_json}</script>\
+  <script>{ui_script}</script>\
 </body>\
 </html>",
         device_name = escape_html(device_name),
         body_html = body_html,
+        provider_catalog_json = provider_catalog_json,
+        ui_script = ui_script,
+    )
+}
+
+fn render_ui_script() -> String {
+    String::from(
+        r#"(function () {
+  const catalogNode = document.getElementById("clawpi-provider-catalog");
+  if (!catalogNode) {
+    return;
+  }
+
+  const MODEL_CUSTOM_ID = "__custom__";
+  const AUTH_MODE_API_KEY = "api_key";
+  const presets = JSON.parse(catalogNode.textContent || "[]");
+  const presetMap = Object.fromEntries(presets.map((preset) => [preset.id, preset]));
+
+  function text(node, value) {
+    if (node) {
+      node.textContent = value;
+    }
+  }
+
+  function toggle(node, hidden) {
+    if (node) {
+      node.classList.toggle("is-hidden", hidden);
+    }
+  }
+
+  function filterPicker(container, query) {
+    const needle = query.trim().toLowerCase();
+    container.querySelectorAll("[data-searchable]").forEach((item) => {
+      const haystack = (item.dataset.searchable || "").toLowerCase();
+      item.classList.toggle("is-hidden", needle && !haystack.includes(needle));
+    });
+  }
+
+  function presetForProvider(providerValue) {
+    return presetMap[providerValue] || (providerValue ? presetMap.custom : null);
+  }
+
+  function modelLabelFor(preset, modelId) {
+    if (!preset || !modelId) {
+      return "Select model";
+    }
+
+    const match = preset.models.find((option) => option.id === modelId);
+    return match ? match.label : "Custom model";
+  }
+
+  function defaultAuthFor(preset, hasSecret) {
+    if (!preset) {
+      return AUTH_MODE_API_KEY;
+    }
+
+    if (preset.id === "custom") {
+      return hasSecret ? AUTH_MODE_API_KEY : preset.default_auth;
+    }
+
+    if (preset.id === "gemini" && !hasSecret) {
+      return "device_login";
+    }
+
+    return hasSecret ? AUTH_MODE_API_KEY : preset.default_auth;
+  }
+
+  function initForm(form) {
+    const formMode = form.dataset.formMode || "setup";
+    const initialProviderValue = form.dataset.initialProvider || "";
+    const initialModelValue = form.dataset.initialModel || "";
+    const initialHasSecret = form.dataset.initialHasSecret === "true";
+
+    const providerPresetInput = form.querySelector('input[name="provider_preset"]');
+    const providerValueInput = form.querySelector('input[name="provider_value"]');
+    const authModeInput = form.querySelector('input[name="auth_mode"]');
+    const modelInput = form.querySelector('input[name="model"]');
+    const providerCustomInput = form.querySelector('input[name="provider_custom"]');
+    const modelCustomInput = form.querySelector('input[name="model_custom"]');
+    const apiKeyInput = form.querySelector('input[name="api_key"]');
+
+    const providerButton = form.querySelector('[data-open-picker="provider"]');
+    const modelButton = form.querySelector('[data-open-picker="model"]');
+    const providerLabel = form.querySelector("[data-provider-label]");
+    const modelLabel = form.querySelector("[data-model-label]");
+    const routeField = form.querySelector('[data-field="route"]');
+    const authField = form.querySelector('[data-field="auth"]');
+    const authOptionsRoot = form.querySelector("[data-auth-options]");
+    const credentialField = form.querySelector('[data-field="credential"]');
+    const credentialLabel = form.querySelector("[data-credential-label]");
+    const customModelField = form.querySelector('[data-field="custom-model"]');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const modelOptionsRoot = form.querySelector("[data-model-options]");
+
+    const providerSheet = form.querySelector('[data-picker="provider"]');
+    const modelSheet = form.querySelector('[data-picker="model"]');
+    const providerSearch = form.querySelector("[data-picker-search]");
+    const modelSearch = form.querySelector("[data-model-search]");
+
+    let state = {
+      preset: null,
+      providerValue: "",
+      authMode: "",
+      modelValue: "",
+      customModel: false,
+    };
+
+    function openSheet(sheet, searchInput) {
+      if (!sheet) return;
+      toggle(sheet, false);
+      if (searchInput) {
+        searchInput.value = "";
+        searchInput.focus();
+      }
+    }
+
+    function closeSheet(sheet) {
+      toggle(sheet, true);
+    }
+
+    function renderAuthOptions(preset) {
+      if (!preset || preset.auth_options.length <= 1) {
+        authOptionsRoot.innerHTML = "";
+        toggle(authField, true);
+        return;
+      }
+
+      authOptionsRoot.innerHTML = preset.auth_options
+        .map((option) => {
+          const activeClass = option.id === state.authMode ? " is-active" : "";
+          return (
+            '<button type="button" class="choice-pill' +
+            activeClass +
+            '" data-auth-option="' +
+            option.id +
+            '">' +
+            option.label +
+            "</button>"
+          );
+        })
+        .join("");
+
+      authOptionsRoot.querySelectorAll("[data-auth-option]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setAuthMode(button.dataset.authOption || "");
+        });
+      });
+
+      toggle(authField, false);
+    }
+
+    function renderModelOptions(preset) {
+      if (!preset) {
+        modelOptionsRoot.innerHTML = "";
+        return;
+      }
+
+      modelOptionsRoot.innerHTML = preset.models
+        .map((option) => {
+          const searchable = (option.label + " " + option.id).toLowerCase();
+          return (
+            '<button type="button" class="picker-option" data-model-id="' +
+            option.id +
+            '" data-searchable="' +
+            searchable +
+            '"><strong>' +
+            option.label +
+            "</strong><span>" +
+            (option.id === MODEL_CUSTOM_ID ? "Type a model ID" : option.id) +
+            "</span></button>"
+          );
+        })
+        .join("");
+
+      modelOptionsRoot.querySelectorAll("[data-model-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setModel(button.dataset.modelId || "");
+          closeSheet(modelSheet);
+        });
+      });
+    }
+
+    function syncProviderValue() {
+      if (!state.preset) {
+        providerValueInput.value = "";
+        return;
+      }
+
+      if (state.preset.route_editable) {
+        state.providerValue = providerCustomInput.value.trim();
+      } else {
+        state.providerValue = state.preset.id;
+      }
+      providerValueInput.value = state.providerValue;
+    }
+
+    function syncModelValue() {
+      if (state.customModel) {
+        state.modelValue = modelCustomInput.value.trim();
+      }
+      modelInput.value = state.modelValue;
+    }
+
+    function setAuthMode(modeId) {
+      if (!state.preset) {
+        return;
+      }
+
+      const authOption =
+        state.preset.auth_options.find((option) => option.id === modeId) ||
+        state.preset.auth_options[0];
+
+      state.authMode = authOption.id;
+      authModeInput.value = authOption.id;
+      renderAuthOptions(state.preset);
+
+      if (authOption.requires_secret) {
+        text(credentialLabel, authOption.secret_label || "API key");
+        apiKeyInput.placeholder = authOption.secret_placeholder || "sk-...";
+        toggle(credentialField, false);
+      } else {
+        toggle(credentialField, true);
+      }
+    }
+
+    function setModel(modelId) {
+      if (!state.preset) {
+        return;
+      }
+
+      const nextModel = modelId || state.preset.default_model;
+      state.customModel = nextModel === MODEL_CUSTOM_ID;
+
+      if (state.customModel) {
+        text(modelLabel, "Custom model");
+        toggle(customModelField, false);
+        state.modelValue = modelCustomInput.value.trim();
+      } else {
+        state.modelValue = nextModel;
+        text(modelLabel, modelLabelFor(state.preset, nextModel));
+        toggle(customModelField, true);
+      }
+
+      syncModelValue();
+      toggle(modelButton, false);
+    }
+
+    function setProvider(providerId, initialSelection) {
+      const preset = presetMap[providerId];
+      if (!preset) {
+        return;
+      }
+
+      state.preset = preset;
+      providerPresetInput.value = preset.id;
+      text(providerLabel, preset.label);
+
+      providerCustomInput.readOnly = !preset.route_editable;
+      providerCustomInput.value = preset.route_editable
+        ? initialSelection || providerCustomInput.value
+        : preset.id;
+      toggle(routeField, preset.route_editable);
+      syncProviderValue();
+
+      state.authMode = defaultAuthFor(preset, initialHasSecret);
+      renderAuthOptions(preset);
+      setAuthMode(state.authMode);
+      renderModelOptions(preset);
+
+      const selectedModel =
+        initialModelValue && presetForProvider(initialProviderValue)?.id === preset.id
+          ? initialModelValue
+          : preset.default_model;
+
+      if (preset.models.some((option) => option.id === selectedModel)) {
+        setModel(selectedModel);
+      } else if (initialModelValue && presetForProvider(initialProviderValue)?.id === preset.id) {
+        modelCustomInput.value = initialModelValue;
+        setModel(MODEL_CUSTOM_ID);
+      } else {
+        modelCustomInput.value = "";
+        setModel(selectedModel);
+      }
+    }
+
+    providerCustomInput.addEventListener("input", syncProviderValue);
+    modelCustomInput.addEventListener("input", syncModelValue);
+
+    providerSearch?.addEventListener("input", () => {
+      filterPicker(providerSheet, providerSearch.value);
+    });
+
+    modelSearch?.addEventListener("input", () => {
+      filterPicker(modelSheet, modelSearch.value);
+    });
+
+    form.querySelectorAll("[data-close-picker]").forEach((button) => {
+      button.addEventListener("click", () => {
+        closeSheet(providerSheet);
+        closeSheet(modelSheet);
+      });
+    });
+
+    providerButton?.addEventListener("click", () => {
+      openSheet(providerSheet, providerSearch);
+    });
+
+    modelButton?.addEventListener("click", () => {
+      openSheet(modelSheet, modelSearch);
+    });
+
+    providerSheet?.addEventListener("click", (event) => {
+      if (event.target === providerSheet) {
+        closeSheet(providerSheet);
+      }
+    });
+
+    modelSheet?.addEventListener("click", (event) => {
+      if (event.target === modelSheet) {
+        closeSheet(modelSheet);
+      }
+    });
+
+    form.querySelectorAll("[data-provider-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const providerId = button.dataset.providerId || "";
+        setProvider(providerId, providerId === "custom" ? initialProviderValue : providerId);
+        closeSheet(providerSheet);
+      });
+    });
+
+    form.addEventListener("submit", (event) => {
+      syncProviderValue();
+      syncModelValue();
+
+      if (!providerValueInput.value.trim()) {
+        event.preventDefault();
+        openSheet(providerSheet, providerSearch);
+        return;
+      }
+
+      if (!modelInput.value.trim()) {
+        event.preventDefault();
+        openSheet(modelSheet, modelSearch);
+        return;
+      }
+
+      const authOption =
+        state.preset?.auth_options.find((option) => option.id === state.authMode) || null;
+      if (authOption && authOption.requires_secret && !apiKeyInput.value.trim()) {
+        const canReuse =
+          formMode === "update" &&
+          initialHasSecret &&
+          initialProviderValue === providerValueInput.value.trim();
+        if (!canReuse) {
+          event.preventDefault();
+          apiKeyInput.focus();
+        }
+      }
+    });
+
+    if (initialProviderValue) {
+      const initialPreset = presetForProvider(initialProviderValue);
+      if (initialPreset) {
+        setProvider(
+          initialPreset.id,
+          initialPreset.id === "custom" ? initialProviderValue : initialPreset.id
+        );
+      }
+    }
+  }
+
+  document.querySelectorAll(".ai-config-form").forEach(initForm);
+})();"#,
     )
 }
 
@@ -1201,11 +1920,12 @@ mod tests {
         let layout = test_layout("setup");
         let html = render_home_page(&layout, &base_config(), None, None, None, None, None).unwrap();
 
-        assert!(html.contains("Configure Claw"));
-        assert!(html.contains("Save AI Configuration"));
-        assert!(html.contains("name=\"provider_preset\""));
+        assert!(html.contains("Pick an AI provider"));
+        assert!(html.contains("data-open-picker=\"provider\""));
         assert!(html.contains("name=\"provider_custom\""));
-        assert!(!html.contains("AI settings and device details"));
+        assert!(html.contains(">Device</summary>"));
+        assert!(!html.contains("ClawPi local console"));
+        assert!(!html.contains("This browser handoff should stay narrow"));
     }
 
     #[test]
@@ -1218,39 +1938,39 @@ mod tests {
 
         let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
 
-        assert!(html.contains("Ask Claw"));
-        assert!(html.contains("AI settings and device details"));
-        assert!(html.contains("openrouter / anthropic/claude-sonnet-4.6"));
-        assert!(!html.contains("Connect the runtime"));
+        assert!(html.contains("<summary>AI</summary>"));
+        assert!(html.contains("Ask Claw anything."));
+        assert!(html.contains("placeholder=\"Ask Claw anything.\""));
+        assert!(!html.contains("AI settings and device details"));
     }
 
     #[test]
-    fn render_ai_form_selects_custom_route_for_unlisted_providers() {
+    fn render_home_page_allows_keyless_ai_configuration() {
+        let layout = test_layout("keyless");
+        let mut config = base_config();
+        config.ai_provider = Some(String::from("ollama"));
+        config.ai_model = Some(String::from("llama3.2"));
+
+        let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
+
+        assert!(html.contains("<summary>AI</summary>"));
+        assert!(html.contains("data-initial-provider=\"ollama\""));
+    }
+
+    #[test]
+    fn render_ai_form_keeps_custom_provider_value() {
         let mut config = base_config();
         config.ai_provider = Some(String::from("acme/router"));
 
-        let html = render_ai_form(
-            &config,
-            "Update AI Configuration",
-            "Leave blank to keep the current key",
-            false,
-            false,
-            "helper copy",
-        );
+        let html = render_ai_form(&config, "custom-ai", "Save", "update", false);
 
-        assert!(html.contains("option value=\"custom\" selected"));
-        assert!(html.contains("name=\"provider_custom\" value=\"acme/router\""));
+        assert!(html.contains("data-initial-provider=\"acme/router\""));
+        assert!(html.contains("name=\"provider_value\""));
     }
 
     #[test]
-    fn resolve_provider_prefers_selected_preset() {
-        let fields = HashMap::from([
-            (String::from("provider_preset"), String::from("ollama")),
-            (
-                String::from("provider_custom"),
-                String::from("should-not-be-used"),
-            ),
-        ]);
+    fn resolve_provider_prefers_provider_value() {
+        let fields = HashMap::from([(String::from("provider_value"), String::from("ollama"))]);
 
         assert_eq!(resolve_provider(&fields), "ollama");
     }
@@ -1273,6 +1993,38 @@ mod tests {
         let fields = HashMap::from([(String::from("provider"), String::from("openrouter"))]);
 
         assert_eq!(resolve_provider(&fields), "openrouter");
+    }
+
+    #[test]
+    fn resolve_model_prefers_hidden_model_value() {
+        let fields = HashMap::from([(String::from("model"), String::from("gpt-5.2"))]);
+
+        assert_eq!(resolve_model(&fields).as_deref(), Some("gpt-5.2"));
+    }
+
+    #[test]
+    fn resolve_ai_secret_clears_secret_for_local_auth() {
+        let config = base_config();
+
+        assert_eq!(
+            resolve_ai_secret(&config, "ollama", AUTH_MODE_LOCAL, "").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn resolve_ai_secret_reuses_existing_secret_on_update() {
+        let mut config = base_config();
+        config.ai_provider = Some(String::from("openrouter"));
+        config.ai_model = Some(String::from("anthropic/claude-sonnet-4.6"));
+        config.ai_api_key = Some(String::from("sk-test-secret"));
+
+        assert_eq!(
+            resolve_ai_secret(&config, "openrouter", AUTH_MODE_API_KEY, "")
+                .unwrap()
+                .as_deref(),
+            Some("sk-test-secret")
+        );
     }
 
     fn base_config() -> ClawPiConfig {

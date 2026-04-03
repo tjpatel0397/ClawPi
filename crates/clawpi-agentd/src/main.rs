@@ -150,7 +150,7 @@ fn build_zeroclaw_config(layout: &Layout, config: &ClawPiConfig) -> io::Result<Z
     let api_key = config
         .ai_api_key
         .clone()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing ai_api_key"))?;
+        .filter(|value| !value.trim().is_empty());
     let provider = config
         .ai_provider
         .clone()

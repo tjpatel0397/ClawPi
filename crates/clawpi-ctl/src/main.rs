@@ -49,19 +49,25 @@ fn main() -> ExitCode {
             let provider = match args.next() {
                 Some(value) => value,
                 None => {
-                    eprintln!("set-ai requires PROVIDER and API_KEY");
+                    eprintln!("set-ai requires PROVIDER and optionally accepts MODEL and SECRET");
                     return ExitCode::from(2);
                 }
             };
-            let api_key = match args.next() {
-                Some(value) => value,
-                None => {
-                    eprintln!("set-ai requires PROVIDER and API_KEY");
-                    return ExitCode::from(2);
+            let second = args.next();
+            let third = args.next();
+
+            let (model, api_key) = match (second.as_deref(), third.as_deref()) {
+                (None, None) => (None, None),
+                (Some(value), None) if looks_like_secret(value) => (None, none_if_dash(value)),
+                (Some(value), None) => (Some(value), None),
+                (Some(secret), Some(model)) if looks_like_secret(secret) => {
+                    (Some(model), none_if_dash(secret))
                 }
+                (Some(model), Some(secret)) => (Some(model), none_if_dash(secret)),
+                (None, Some(_)) => unreachable!("third positional arg cannot exist without second"),
             };
-            let model = args.next();
-            update_ai(&provider, &api_key, model.as_deref())
+
+            update_ai(&provider, api_key, model)
         }
         Some("clear-ai") => clear_ai(),
         Some("complete-setup") => toggle_setup_complete(true),
@@ -85,7 +91,9 @@ fn print_usage() {
     println!("  set-device-name NAME      update the device name in /etc/clawpi/config.toml");
     println!("  set-wifi SSID PASS [CC]   store setup-mode Wi-Fi credentials");
     println!("  clear-wifi                remove stored Wi-Fi credentials");
-    println!("  set-ai PROVIDER KEY [MODEL] store AI provider, API key, and model");
+    println!(
+        "  set-ai PROVIDER [MODEL] [SECRET] store AI provider, model, and optional auth secret"
+    );
     println!("  clear-ai                  remove stored AI configuration");
     println!("  complete-setup            mark the setup contract as complete");
     println!("  require-setup             mark the setup contract as pending");
@@ -371,7 +379,7 @@ fn clear_wifi() -> ExitCode {
     }
 }
 
-fn update_ai(provider: &str, api_key: &str, model: Option<&str>) -> ExitCode {
+fn update_ai(provider: &str, api_key: Option<&str>, model: Option<&str>) -> ExitCode {
     let layout = Layout::detect();
 
     match set_ai_profile(&layout, provider, model, api_key) {
@@ -385,6 +393,22 @@ fn update_ai(provider: &str, api_key: &str, model: Option<&str>) -> ExitCode {
             eprintln!("failed to update AI config: {err}");
             ExitCode::from(1)
         }
+    }
+}
+
+fn looks_like_secret(value: &str) -> bool {
+    value == "-"
+        || value.starts_with("sk-")
+        || value.starts_with("rk-")
+        || value.starts_with("gsk_")
+        || value.starts_with("AIza")
+}
+
+fn none_if_dash(value: &str) -> Option<&str> {
+    if value == "-" {
+        None
+    } else {
+        Some(value)
     }
 }
 

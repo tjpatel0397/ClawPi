@@ -566,6 +566,7 @@ name = "clawpi-webd"
 version = "0.1.0"
 dependencies = [
  "clawpi-core",
+ "serde",
  "serde_json",
 ]
 
