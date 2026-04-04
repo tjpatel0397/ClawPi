@@ -79,8 +79,20 @@ const AUTH_LOCAL: UiAuthOption = UiAuthOption {
 
 const OPENROUTER_MODELS: &[UiModelOption] = &[
     UiModelOption {
+        id: "anthropic/claude-opus-4-6",
+        label: "Claude Opus 4.6",
+    },
+    UiModelOption {
         id: "anthropic/claude-sonnet-4.6",
         label: "Claude Sonnet 4.6",
+    },
+    UiModelOption {
+        id: "anthropic/claude-sonnet-4-5-20250929",
+        label: "Claude Sonnet 4.5",
+    },
+    UiModelOption {
+        id: "anthropic/claude-haiku-4-5-20251001",
+        label: "Claude Haiku 4.5",
     },
     UiModelOption {
         id: "openai/gpt-5.2",
@@ -91,19 +103,55 @@ const OPENROUTER_MODELS: &[UiModelOption] = &[
         label: "GPT-5 mini",
     },
     UiModelOption {
-        id: "google/gemini-3-pro-preview",
-        label: "Gemini 3 Pro Preview",
+        id: "openai/o4-mini",
+        label: "o4-mini",
+    },
+    UiModelOption {
+        id: "google/gemini-2.5-pro",
+        label: "Gemini 2.5 Pro",
+    },
+    UiModelOption {
+        id: "google/gemini-2.5-flash",
+        label: "Gemini 2.5 Flash",
+    },
+    UiModelOption {
+        id: "meta-llama/llama-4-maverick",
+        label: "Llama 4 Maverick",
+    },
+    UiModelOption {
+        id: "meta-llama/llama-4-scout",
+        label: "Llama 4 Scout",
+    },
+    UiModelOption {
+        id: "deepseek/deepseek-r1",
+        label: "DeepSeek R1",
+    },
+    UiModelOption {
+        id: "deepseek/deepseek-chat-v3-0324",
+        label: "DeepSeek V3",
+    },
+    UiModelOption {
+        id: "mistralai/mistral-large-2411",
+        label: "Mistral Large",
+    },
+    UiModelOption {
+        id: "qwen/qwen-2.5-72b-instruct",
+        label: "Qwen 2.5 72B",
     },
 ];
 
 const ANTHROPIC_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "claude-sonnet-4-5-20250929",
-        label: "Claude Sonnet 4.5",
-    },
-    UiModelOption {
         id: "claude-opus-4-6",
         label: "Claude Opus 4.6",
+    },
+    UiModelOption {
+        id: "claude-sonnet-4-6",
+        label: "Claude Sonnet 4.6",
+    },
+    UiModelOption {
+        id: "claude-sonnet-4-5-20250929",
+        label: "Claude Sonnet 4.5",
     },
     UiModelOption {
         id: "claude-haiku-4-5-20251001",
@@ -121,31 +169,47 @@ const OPENAI_MODELS: &[UiModelOption] = &[
         label: "GPT-5 mini",
     },
     UiModelOption {
-        id: "gpt-5.2-codex",
-        label: "GPT-5.2 Codex",
+        id: "o4-mini",
+        label: "o4-mini",
+    },
+    UiModelOption {
+        id: "o3",
+        label: "o3",
+    },
+    UiModelOption {
+        id: "o3-mini",
+        label: "o3-mini",
+    },
+    UiModelOption {
+        id: "gpt-4.1",
+        label: "GPT-4.1",
+    },
+    UiModelOption {
+        id: "gpt-4.1-mini",
+        label: "GPT-4.1 mini",
     },
 ];
 
 const OPENAI_CODEX_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "gpt-5-codex",
-        label: "GPT-5 Codex",
-    },
-    UiModelOption {
         id: "gpt-5.2-codex",
         label: "GPT-5.2 Codex",
+    },
+    UiModelOption {
+        id: "gpt-5-codex",
+        label: "GPT-5 Codex",
     },
     UiModelOption {
         id: "o4-mini",
         label: "o4-mini",
     },
+    UiModelOption {
+        id: "o3",
+        label: "o3",
+    },
 ];
 
 const GEMINI_MODELS: &[UiModelOption] = &[
-    UiModelOption {
-        id: "gemini-3-pro-preview",
-        label: "Gemini 3 Pro Preview",
-    },
     UiModelOption {
         id: "gemini-2.5-pro",
         label: "Gemini 2.5 Pro",
@@ -153,6 +217,10 @@ const GEMINI_MODELS: &[UiModelOption] = &[
     UiModelOption {
         id: "gemini-2.5-flash",
         label: "Gemini 2.5 Flash",
+    },
+    UiModelOption {
+        id: "gemini-2.0-flash",
+        label: "Gemini 2.0 Flash",
     },
 ];
 
@@ -162,12 +230,20 @@ const GROQ_MODELS: &[UiModelOption] = &[
         label: "Llama 3.3 70B",
     },
     UiModelOption {
-        id: "openai/gpt-oss-120b",
-        label: "GPT-OSS 120B",
+        id: "llama-3.1-8b-instant",
+        label: "Llama 3.1 8B",
     },
     UiModelOption {
-        id: "openai/gpt-oss-20b",
-        label: "GPT-OSS 20B",
+        id: "mixtral-8x7b-32768",
+        label: "Mixtral 8x7B",
+    },
+    UiModelOption {
+        id: "gemma2-9b-it",
+        label: "Gemma 2 9B",
+    },
+    UiModelOption {
+        id: "deepseek-r1-distill-llama-70b",
+        label: "DeepSeek R1 70B",
     },
 ];
 
@@ -177,12 +253,28 @@ const OLLAMA_MODELS: &[UiModelOption] = &[
         label: "Llama 3.2",
     },
     UiModelOption {
-        id: "qwen2.5-coder:7b",
-        label: "Qwen 2.5 Coder 7B",
+        id: "llama3.1",
+        label: "Llama 3.1",
     },
     UiModelOption {
         id: "mistral",
         label: "Mistral",
+    },
+    UiModelOption {
+        id: "qwen2.5-coder:7b",
+        label: "Qwen 2.5 Coder 7B",
+    },
+    UiModelOption {
+        id: "gemma2",
+        label: "Gemma 2",
+    },
+    UiModelOption {
+        id: "phi3",
+        label: "Phi-3",
+    },
+    UiModelOption {
+        id: "deepseek-r1:7b",
+        label: "DeepSeek R1 7B",
     },
 ];
 
@@ -237,7 +329,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "Key or device login",
         route_editable: false,
         route_placeholder: "gemini",
-        default_model: "gemini-2.5-pro",
+        default_model: "gemini-2.5-flash",
         default_auth: AUTH_MODE_API_KEY,
         auth_options: &[AUTH_API_KEY, AUTH_DEVICE_LOGIN],
         models: GEMINI_MODELS,
