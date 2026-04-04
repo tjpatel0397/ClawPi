@@ -1073,7 +1073,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .shell-header {{ height: 2.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0; border-bottom: 1px solid #18181b; color: #71717a; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.84rem; }}\
     .shell-header-left, .shell-header-right {{ display: inline-flex; align-items: center; gap: 0.9rem; min-width: 0; }}\
     .shell-header-left {{ padding-left: 0; gap: 0; }}\
-    .shell-header-right {{ padding-right: 0.85rem; }}\
+    .shell-header-right {{ padding-right: 1.4rem; }}\
     .shell-menu-cell {{ width: 2.9rem; height: 2.9rem; display: inline-flex; align-items: center; justify-content: center; border-right: 1px solid #18181b; margin-right: 0.9rem; }}\
     .chrome-button {{ background: transparent; color: #71717a; border: none; padding: 0; font-size: 0.95rem; font-weight: 400; line-height: 1; }}\
     .chrome-button:hover {{ background: transparent; color: #fafafa; }}\
@@ -1102,7 +1102,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .terminal-idle .editor {{ border-top: none; }}\
     .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 50px; }}\
     .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
-    .prompt-char {{ color: #4ade80; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
+    .prompt-char {{ color: #fafafa; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
     .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; font-family: inherit; letter-spacing: 0; }}\
     .editor-input textarea:focus {{ outline: none; }}\
     .editor-input textarea::placeholder {{ color: #71717a; }}\
@@ -1118,7 +1118,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .footer-link {{ background: transparent; color: #a1a1aa; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
     .footer-link:hover {{ background: transparent; color: #fafafa; }}\
     .terminal-idle .editor-input {{ border: 1px solid #27272a; border-radius: 14px 14px 0 0; background: #18181b; padding-top: 1rem; min-height: 3.55rem; }}\
-    .terminal-idle .editor-footer {{ border: 1px solid #27272a; border-top: none; border-radius: 0 0 14px 14px; background: #18181b; padding-bottom: 0.95rem; }}\
+    .terminal-idle .editor-footer {{ border: 1px solid #27272a; border-top: none; border-radius: 0 0 14px 14px; background: #18181b; padding-bottom: 0.95rem; position: relative; top: -1px; }}\
     .settings-panel {{ position: fixed; inset: 0; background: #09090b; z-index: 20; overflow-y: auto; }}\
     .settings-shell {{ width: min(100%, 42rem); margin: 0 auto; }}\
     .settings-head {{ display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #18181b; }}\
