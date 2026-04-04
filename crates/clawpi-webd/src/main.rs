@@ -714,6 +714,7 @@ fn render_chat_view(
     let transcript_html = render_transcript(last_prompt, answer);
     let provider_label = current_provider_label(config);
     let model_options_html = render_current_model_options(config);
+    let session_summary = render_session_summary(last_prompt, answer);
     let terminal_class = if has_transcript {
         "terminal"
     } else {
@@ -729,12 +730,9 @@ fn render_chat_view(
                  <span class=\"shell-session\">Current session <span class=\"shell-caret\">▾</span></span>\
                </div>\
                <div class=\"shell-header-right\">\
-                 <span class=\"shell-status\"><span class=\"shell-dot\"></span>{device_name}.local</span>\
                  <span class=\"shell-status\"><span class=\"shell-dot\"></span>{wifi_ssid}</span>\
-                 <span class=\"shell-status\">⌘</span>\
                </div>\
              </div>",
-            device_name = escape_html(&config.device_name),
             wifi_ssid = escape_html(wifi_ssid),
         )
     } else {
@@ -747,12 +745,9 @@ fn render_chat_view(
                  <span class=\"shell-session\">New session <span class=\"shell-caret\">▾</span></span>\
                </div>\
                <div class=\"shell-header-right\">\
-                 <span class=\"shell-status\"><span class=\"shell-dot\"></span>{device_name}.local</span>\
                  <span class=\"shell-status\"><span class=\"shell-dot\"></span>{wifi_ssid}</span>\
-                 <span class=\"shell-status\">⌘</span>\
                </div>\
              </div>",
-            device_name = escape_html(&config.device_name),
             wifi_ssid = escape_html(wifi_ssid),
         )
     };
@@ -761,15 +756,12 @@ fn render_chat_view(
     } else {
         format!(
             "<div class=\"session-intro\">\
-               <div class=\"session-kicker\">New session</div>\
-               <div class=\"session-meta\"><span class=\"session-icon\">⌂</span>{device_name}.local</div>\
-               <div class=\"session-meta\"><span class=\"session-icon\">◌</span>{wifi_ssid}</div>\
-               <div class=\"session-meta\"><span class=\"session-icon\">⌁</span>{provider_label} · {model_label}</div>\
+               <div class=\"session-kicker\" id=\"session-date\">Sat Apr 4, 2026</div>\
+               <div class=\"session-meta\" id=\"session-weather\" data-fallback-weather=\"Local weather unavailable\">Locating weather...</div>\
+               <div class=\"session-summary\" title=\"{summary_title}\">{session_summary}</div>\
              </div>",
-            device_name = escape_html(&config.device_name),
-            wifi_ssid = escape_html(wifi_ssid),
-            provider_label = escape_html(provider_label),
-            model_label = escape_html(config.ai_model.as_deref().unwrap_or("No model")),
+            summary_title = escape_html(&session_summary),
+            session_summary = escape_html(&session_summary),
         )
     };
 
@@ -802,7 +794,6 @@ fn render_chat_view(
                      </form>\
                      <div class=\"footer-actions\">\
                        <button type=\"button\" class=\"footer-link\" id=\"open-settings\">settings</button>\
-                       <span class=\"footer-meta\">{device_name} · {wifi_ssid}</span>\
                      </div>\
                    </div>\
                  </div>\
@@ -825,11 +816,25 @@ fn render_chat_view(
         session_meta_html = session_meta_html,
         draft_prompt = escape_html(draft_prompt.unwrap_or("")),
         provider_label = escape_html(provider_label),
-        device_name = escape_html(&config.device_name),
-        wifi_ssid = escape_html(wifi_ssid),
         ai_form = ai_form,
         model_options_html = model_options_html,
     )
+}
+
+fn render_session_summary(last_prompt: Option<&str>, answer: Option<&str>) -> String {
+    let source = answer.or(last_prompt).unwrap_or("No recent conversation yet.");
+    let single_line = source.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = if single_line.chars().count() > 96 {
+        let shortened: String = single_line.chars().take(93).collect();
+        format!("{shortened}...")
+    } else {
+        single_line
+    };
+    if trimmed.is_empty() {
+        String::from("No recent conversation yet.")
+    } else {
+        trimmed
+    }
 }
 
 fn render_ai_form(
@@ -1089,92 +1094,90 @@ fn render_document(device_name: &str, body_html: &str) -> String {
   <style>\
     :root {{ color-scheme: dark; }}\
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}\
-    body {{ height: 100vh; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.5; overflow: hidden; }}\
+    body {{ height: 100vh; background: #09090b; color: #fafafa; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.5; overflow: hidden; }}\
     main {{ height: 100vh; display: flex; flex-direction: column; }}\
-    .hint {{ color: #8b949e; font-size: 13px; padding: 1.5rem 1rem 0; }}\
+    .hint {{ color: #a1a1aa; font-size: 13px; padding: 1.5rem 1rem 0; }}\
     .notice {{ padding: 0.4rem 0.8rem; font-size: 13px; }}\
-    .notice-ok {{ color: #3fb950; }}\
-    .notice-error {{ color: #f85149; }}\
-    label {{ display: block; color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}\
+    .notice-ok {{ color: #4ade80; }}\
+    .notice-error {{ color: #f87171; }}\
+    label {{ display: block; color: #a1a1aa; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}\
     .field {{ display: grid; gap: 0.3rem; }}\
-    input, select {{ width: 100%; background: #161b22; color: #c9d1d9; border: 1px solid #30363d; padding: 0.5rem 0.6rem; font: inherit; font-size: 14px; }}\
-    input:focus, select:focus {{ outline: none; border-color: #3fb950; }}\
-    select {{ cursor: pointer; -webkit-appearance: none; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.6rem center; padding-right: 1.8rem; }}\
-    select option {{ background: #161b22; color: #c9d1d9; }}\
-    select optgroup {{ color: #8b949e; font-style: normal; }}\
-    button {{ padding: 0.5rem 0.8rem; background: #3fb950; color: #0d1117; border: none; font: inherit; font-weight: 600; cursor: pointer; }}\
-    button:hover {{ background: #2ea043; }}\
+    input, select {{ width: 100%; background: #18181b; color: #fafafa; border: 1px solid #27272a; padding: 0.5rem 0.6rem; font: inherit; font-size: 14px; }}\
+    input:focus, select:focus {{ outline: none; border-color: #52525b; }}\
+    select {{ cursor: pointer; -webkit-appearance: none; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23a1a1aa'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.6rem center; padding-right: 1.8rem; }}\
+    select option {{ background: #18181b; color: #fafafa; }}\
+    select optgroup {{ color: #a1a1aa; font-style: normal; }}\
+    button {{ padding: 0.5rem 0.8rem; background: #fafafa; color: #09090b; border: none; font: inherit; font-weight: 600; cursor: pointer; }}\
+    button:hover {{ background: #e4e4e7; }}\
     .form-stack {{ display: grid; gap: 0.8rem; padding: 1rem; }}\
     .is-hidden {{ display: none !important; }}\
     .console-shell {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
     .console-body {{ display: flex; flex: 1; min-height: 0; }}\
-    .shell-header {{ height: 2.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0; border-bottom: 1px solid #21262d; color: #6e7681; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.84rem; }}\
+    .shell-header {{ height: 2.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0; border-bottom: 1px solid #18181b; color: #71717a; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.84rem; }}\
     .shell-header-left, .shell-header-right {{ display: inline-flex; align-items: center; gap: 0.9rem; min-width: 0; }}\
     .shell-header-left {{ padding-left: 0; gap: 0; }}\
     .shell-header-right {{ padding-right: 0.85rem; }}\
-    .shell-menu-cell {{ width: 2.9rem; height: 2.9rem; display: inline-flex; align-items: center; justify-content: center; border-right: 1px solid #21262d; margin-right: 0.9rem; }}\
-    .chrome-button {{ background: transparent; color: #6e7681; border: none; padding: 0; font-size: 0.95rem; font-weight: 400; line-height: 1; }}\
-    .chrome-button:hover {{ background: transparent; color: #c9d1d9; }}\
-    .shell-session {{ color: #a7adb7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
-    .shell-caret {{ color: #6e7681; margin-left: 0.25rem; }}\
+    .shell-menu-cell {{ width: 2.9rem; height: 2.9rem; display: inline-flex; align-items: center; justify-content: center; border-right: 1px solid #18181b; margin-right: 0.9rem; }}\
+    .chrome-button {{ background: transparent; color: #71717a; border: none; padding: 0; font-size: 0.95rem; font-weight: 400; line-height: 1; }}\
+    .chrome-button:hover {{ background: transparent; color: #fafafa; }}\
+    .shell-session {{ color: #d4d4d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
+    .shell-caret {{ color: #71717a; margin-left: 0.25rem; }}\
     .shell-status {{ display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }}\
-    .shell-dot {{ width: 0.35rem; height: 0.35rem; border-radius: 999px; background: #7ee787; flex-shrink: 0; }}\
+    .shell-dot {{ width: 0.35rem; height: 0.35rem; border-radius: 999px; background: #4ade80; flex-shrink: 0; }}\
     .terminal {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
     .terminal-idle {{ justify-content: flex-start; }}\
     .messages {{ flex: 1; overflow-y: auto; padding: 1.25rem 1rem 0; }}\
     .messages-inner {{ width: min(100%, 64rem); margin: 0 auto; padding-bottom: 2rem; }}\
     .messages::-webkit-scrollbar {{ width: 4px; }}\
     .messages::-webkit-scrollbar-track {{ background: transparent; }}\
-    .messages::-webkit-scrollbar-thumb {{ background: #30363d; }}\
+    .messages::-webkit-scrollbar-thumb {{ background: #27272a; }}\
     .msg {{ padding: 0.3rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }}\
-    .msg-user {{ color: #c9d1d9; }}\
-    .msg-user .msg-prefix {{ color: #58a6ff; }}\
-    .msg-claw {{ color: #c9d1d9; }}\
-    .msg-claw .msg-prefix {{ color: #d2a8ff; }}\
+    .msg-user {{ color: #fafafa; }}\
+    .msg-user .msg-prefix {{ color: #a1a1aa; }}\
+    .msg-claw {{ color: #fafafa; }}\
+    .msg-claw .msg-prefix {{ color: #d4d4d8; }}\
     .msg-empty {{ min-height: 0; padding: 0; }}\
-    .msg-system {{ color: #8b949e; font-size: 13px; }}\
-    .editor {{ border-top: 1px solid #21262d; background: #0d1117; flex-shrink: 0; }}\
+    .msg-system {{ color: #a1a1aa; font-size: 13px; }}\
+    .editor {{ border-top: 1px solid #18181b; background: #09090b; flex-shrink: 0; }}\
     .editor-inner {{ width: min(100%, 64rem); margin: 0 auto; }}\
-    .terminal-idle .messages {{ flex: 0 0 clamp(10rem, 28vh, 17rem); overflow: hidden; }}\
+    .terminal-idle .messages {{ flex: 0 0 clamp(14rem, 36vh, 24rem); overflow: hidden; }}\
     .terminal-idle .messages-inner {{ padding-bottom: 0; }}\
     .terminal-idle .editor {{ border-top: none; }}\
-    .terminal-idle .editor-inner {{ width: min(100%, 47rem); margin-left: max(2rem, 16vw); margin-right: auto; padding: 0 1rem 2rem; }}\
+    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 2.5rem; }}\
     .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; }}\
-    .prompt-char {{ color: #3fb950; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
-    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #c9d1d9; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; }}\
+    .prompt-char {{ color: #4ade80; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
+    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; }}\
     .editor-input textarea:focus {{ outline: none; }}\
-    .editor-input textarea::placeholder {{ color: #484f58; }}\
-    .session-intro {{ display: grid; gap: 0.55rem; padding: 0 1rem 1.2rem; }}\
-    .session-kicker {{ color: #8b949e; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: clamp(1.05rem, 1.9vw, 1.35rem); font-weight: 600; letter-spacing: -0.02em; }}\
-    .session-meta {{ color: #6e7681; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.93rem; display: inline-flex; align-items: center; gap: 0.55rem; }}\
-    .session-icon {{ color: #5b616b; width: 0.85rem; display: inline-flex; justify-content: center; flex-shrink: 0; }}\
+    .editor-input textarea::placeholder {{ color: #71717a; }}\
+    .session-intro {{ display: grid; gap: 0.7rem; padding: 0 0 1.2rem; }}\
+    .session-kicker {{ color: #e4e4e7; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: clamp(1.1rem, 1.85vw, 1.35rem); font-weight: 600; letter-spacing: -0.02em; }}\
+    .session-meta {{ color: #a1a1aa; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.55rem; }}\
+    .session-summary {{ color: #71717a; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.9rem; line-height: 1.5; max-width: 42rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
     .editor-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 1rem 0.9rem; }}\
     .model-picker {{ display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }}\
-    .footer-label {{ color: #6e7681; font-size: 12px; text-transform: lowercase; }}\
-    .model-select {{ width: auto; min-width: 11rem; background: transparent; border: none; color: #8b949e; font-size: 12px; padding: 0 1.15rem 0 0; cursor: pointer; }}\
-    .model-select:focus {{ outline: none; color: #c9d1d9; }}\
-    .footer-mode {{ color: #8b949e; font-size: 12px; white-space: nowrap; }}\
+    .footer-label {{ color: #a1a1aa; font-size: 12px; text-transform: lowercase; }}\
+    .model-select {{ width: auto; min-width: 11rem; background: transparent; border: none; color: #d4d4d8; font-size: 12px; padding: 0 1.15rem 0 0; cursor: pointer; }}\
+    .model-select:focus {{ outline: none; color: #fafafa; }}\
+    .footer-mode {{ color: #a1a1aa; font-size: 12px; white-space: nowrap; }}\
     .footer-actions {{ display: inline-flex; align-items: center; gap: 0.85rem; min-width: 0; }}\
-    .footer-link {{ background: transparent; color: #6e7681; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; }}\
-    .footer-link:hover {{ background: transparent; color: #c9d1d9; }}\
-    .footer-meta {{ color: #484f58; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
-    .terminal-idle .editor-input {{ border: 1px solid #312b34; border-radius: 12px 12px 0 0; background: #19151d; padding-top: 1rem; min-height: 3.55rem; }}\
-    .terminal-idle .editor-footer {{ border: 1px solid #312b34; border-top: none; border-radius: 0 0 12px 12px; background: #19151d; padding-bottom: 0.95rem; }}\
-    .settings-panel {{ position: fixed; inset: 0; background: #0d1117; z-index: 20; overflow-y: auto; }}\
+    .footer-link {{ background: transparent; color: #a1a1aa; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; }}\
+    .footer-link:hover {{ background: transparent; color: #fafafa; }}\
+    .terminal-idle .editor-input {{ border: 1px solid #27272a; border-radius: 14px 14px 0 0; background: #18181b; padding-top: 1rem; min-height: 3.55rem; }}\
+    .terminal-idle .editor-footer {{ border: 1px solid #27272a; border-top: none; border-radius: 0 0 14px 14px; background: #18181b; padding-bottom: 0.95rem; }}\
+    .settings-panel {{ position: fixed; inset: 0; background: #09090b; z-index: 20; overflow-y: auto; }}\
     .settings-shell {{ width: min(100%, 42rem); margin: 0 auto; }}\
-    .settings-head {{ display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #21262d; }}\
-    .settings-head span {{ color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }}\
-    .settings-head button {{ background: transparent; color: #484f58; border: 1px solid #30363d; font-size: 12px; padding: 0.2rem 0.5rem; }}\
-    .settings-head button:hover {{ color: #c9d1d9; background: transparent; }}\
-    .settings-copy {{ color: #6e7681; font-size: 13px; padding: 0.85rem 1rem 0; }}\
-    .device-info {{ color: #484f58; font-size: 12px; padding: 1rem; }}\
+    .settings-head {{ display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #18181b; }}\
+    .settings-head span {{ color: #a1a1aa; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }}\
+    .settings-head button {{ background: transparent; color: #71717a; border: 1px solid #27272a; font-size: 12px; padding: 0.2rem 0.5rem; }}\
+    .settings-head button:hover {{ color: #fafafa; background: transparent; }}\
+    .settings-copy {{ color: #71717a; font-size: 13px; padding: 0.85rem 1rem 0; }}\
+    .device-info {{ color: #71717a; font-size: 12px; padding: 1rem; }}\
     @media (max-width: 640px) {{\
       .shell-header-right {{ display: none; }}\
-      .terminal-idle .messages {{ flex-basis: 22vh; }}\
+      .terminal-idle .messages {{ flex-basis: 28vh; }}\
       .terminal-idle .editor-inner {{ width: auto; margin-left: 1rem; margin-right: 1rem; padding-bottom: 1.25rem; }}\
       .editor-footer {{ flex-direction: column; align-items: flex-start; }}\
-      .footer-actions {{ width: 100%; justify-content: space-between; }}\
-      .footer-meta {{ white-space: normal; }}\
+      .footer-actions {{ width: 100%; justify-content: flex-end; }}\
     }}\
   </style>\
 </head>\
@@ -1363,6 +1366,82 @@ fn render_ui_script() -> String {
     });
   }
 
+  function formatSessionDate() {
+    var dateNode = document.getElementById("session-date");
+    if (!dateNode) return;
+    var now = new Date();
+    var parts = new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    }).formatToParts(now);
+    var map = {};
+    parts.forEach(function (part) {
+      if (part.type !== "literal") map[part.type] = part.value;
+    });
+    if (map.weekday && map.month && map.day && map.year) {
+      dateNode.textContent = map.weekday + " " + map.month + " " + map.day + ", " + map.year;
+    }
+  }
+
+  function weatherIcon(code) {
+    if (code === 0) return "☀";
+    if ([1, 2].indexOf(code) !== -1) return "⛅";
+    if (code === 3) return "☁";
+    if ([45, 48].indexOf(code) !== -1) return "🌫";
+    if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].indexOf(code) !== -1) return "🌧";
+    if ([71, 73, 75, 77, 85, 86].indexOf(code) !== -1) return "❄";
+    if ([95, 96, 99].indexOf(code) !== -1) return "⛈";
+    return "•";
+  }
+
+  function hydrateWeather() {
+    var weatherNode = document.getElementById("session-weather");
+    if (!weatherNode) return;
+    var fallback = weatherNode.dataset.fallbackWeather || "Local weather unavailable";
+    if (!navigator.geolocation) {
+      weatherNode.textContent = fallback;
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(function (position) {
+      var lat = position.coords.latitude;
+      var lon = position.coords.longitude;
+      var weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + encodeURIComponent(lat) + "&longitude=" + encodeURIComponent(lon) + "&current=temperature_2m,weather_code&temperature_unit=fahrenheit";
+      var geoUrl = "https://geocoding-api.open-meteo.com/v1/reverse?latitude=" + encodeURIComponent(lat) + "&longitude=" + encodeURIComponent(lon) + "&language=en&format=json";
+
+      Promise.all([
+        fetch(weatherUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+        fetch(geoUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+      ]).then(function (results) {
+        var weather = results[0];
+        var geo = results[1];
+        var city = "Local";
+        var region = "";
+        if (geo && geo.results && geo.results.length) {
+          city = geo.results[0].city || geo.results[0].name || city;
+          region = geo.results[0].admin1 || geo.results[0].country_code || "";
+        }
+        if (!weather || !weather.current) {
+          weatherNode.textContent = city + (region ? ", " + region : "") + " • Weather unavailable";
+          return;
+        }
+        var temp = Math.round(weather.current.temperature_2m);
+        var icon = weatherIcon(weather.current.weather_code);
+        weatherNode.textContent = city + (region ? ", " + region : "") + " • " + icon + " " + temp + "F";
+      }).catch(function () {
+        weatherNode.textContent = fallback;
+      });
+    }, function () {
+      weatherNode.textContent = fallback;
+    }, {
+      enableHighAccuracy: false,
+      timeout: 4000,
+      maximumAge: 900000
+    });
+  }
+
   // Auto-resize textarea to content
   var prompt = document.getElementById("prompt");
   if (prompt) {
@@ -1427,6 +1506,9 @@ fn render_ui_script() -> String {
   if (output) {
     output.scrollTop = output.scrollHeight;
   }
+
+  formatSessionDate();
+  hydrateWeather();
 })();"#,
     )
 }
