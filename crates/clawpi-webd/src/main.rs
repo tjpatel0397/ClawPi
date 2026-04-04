@@ -723,12 +723,15 @@ fn render_chat_view(
         format!(
             "<div class=\"shell-header\">\
                <div class=\"shell-header-left\">\
-                 <button type=\"button\" class=\"chrome-button\" id=\"open-settings-header\">☰</button>\
-                 <span class=\"shell-session\">Current session</span>\
+                 <div class=\"shell-menu-cell\">\
+                   <button type=\"button\" class=\"chrome-button\" id=\"open-settings-header\">☰</button>\
+                 </div>\
+                 <span class=\"shell-session\">Current session <span class=\"shell-caret\">▾</span></span>\
                </div>\
                <div class=\"shell-header-right\">\
                  <span class=\"shell-status\"><span class=\"shell-dot\"></span>{device_name}.local</span>\
                  <span class=\"shell-status\"><span class=\"shell-dot\"></span>{wifi_ssid}</span>\
+                 <span class=\"shell-status\">⌘</span>\
                </div>\
              </div>",
             device_name = escape_html(&config.device_name),
@@ -738,12 +741,15 @@ fn render_chat_view(
         format!(
             "<div class=\"shell-header\">\
                <div class=\"shell-header-left\">\
-                 <button type=\"button\" class=\"chrome-button\" id=\"open-settings-header\">☰</button>\
-                 <span class=\"shell-session\">New session</span>\
+                 <div class=\"shell-menu-cell\">\
+                   <button type=\"button\" class=\"chrome-button\" id=\"open-settings-header\">☰</button>\
+                 </div>\
+                 <span class=\"shell-session\">New session <span class=\"shell-caret\">▾</span></span>\
                </div>\
                <div class=\"shell-header-right\">\
                  <span class=\"shell-status\"><span class=\"shell-dot\"></span>{device_name}.local</span>\
                  <span class=\"shell-status\"><span class=\"shell-dot\"></span>{wifi_ssid}</span>\
+                 <span class=\"shell-status\">⌘</span>\
                </div>\
              </div>",
             device_name = escape_html(&config.device_name),
@@ -756,9 +762,9 @@ fn render_chat_view(
         format!(
             "<div class=\"session-intro\">\
                <div class=\"session-kicker\">New session</div>\
-               <div class=\"session-meta\">{device_name}.local</div>\
-               <div class=\"session-meta\">{wifi_ssid}</div>\
-               <div class=\"session-meta\">{provider_label} · {model_label}</div>\
+               <div class=\"session-meta\"><span class=\"session-icon\">⌂</span>{device_name}.local</div>\
+               <div class=\"session-meta\"><span class=\"session-icon\">◌</span>{wifi_ssid}</div>\
+               <div class=\"session-meta\"><span class=\"session-icon\">⌁</span>{provider_label} · {model_label}</div>\
              </div>",
             device_name = escape_html(&config.device_name),
             wifi_ssid = escape_html(wifi_ssid),
@@ -787,11 +793,12 @@ fn render_chat_view(
                      <textarea id=\"prompt\" name=\"prompt\" rows=\"1\" placeholder=\"Ask anything... \\\"Help me debug this issue\\\"\" autofocus>{draft_prompt}</textarea>\
                    </form>\
                    <div class=\"editor-footer\">\
-                     <form method=\"post\" action=\"/switch-model\" class=\"model-picker\" id=\"model-switch-form\">\
+                   <form method=\"post\" action=\"/switch-model\" class=\"model-picker\" id=\"model-switch-form\">\
                        <span class=\"footer-label\">{provider_label}</span>\
                        <select id=\"model-switcher\" class=\"model-select\" name=\"model\">\
                          {model_options_html}\
                        </select>\
+                       <span class=\"footer-mode\">Default</span>\
                      </form>\
                      <div class=\"footer-actions\">\
                        <button type=\"button\" class=\"footer-link\" id=\"open-settings\">settings</button>\
@@ -1101,11 +1108,15 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .is-hidden {{ display: none !important; }}\
     .console-shell {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
     .console-body {{ display: flex; flex: 1; min-height: 0; }}\
-    .shell-header {{ height: 2.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 0.85rem; border-bottom: 1px solid #21262d; color: #6e7681; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.84rem; }}\
+    .shell-header {{ height: 2.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0; border-bottom: 1px solid #21262d; color: #6e7681; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.84rem; }}\
     .shell-header-left, .shell-header-right {{ display: inline-flex; align-items: center; gap: 0.9rem; min-width: 0; }}\
+    .shell-header-left {{ padding-left: 0; gap: 0; }}\
+    .shell-header-right {{ padding-right: 0.85rem; }}\
+    .shell-menu-cell {{ width: 2.9rem; height: 2.9rem; display: inline-flex; align-items: center; justify-content: center; border-right: 1px solid #21262d; margin-right: 0.9rem; }}\
     .chrome-button {{ background: transparent; color: #6e7681; border: none; padding: 0; font-size: 0.95rem; font-weight: 400; line-height: 1; }}\
     .chrome-button:hover {{ background: transparent; color: #c9d1d9; }}\
     .shell-session {{ color: #a7adb7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
+    .shell-caret {{ color: #6e7681; margin-left: 0.25rem; }}\
     .shell-status {{ display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }}\
     .shell-dot {{ width: 0.35rem; height: 0.35rem; border-radius: 999px; background: #7ee787; flex-shrink: 0; }}\
     .terminal {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
@@ -1124,29 +1135,31 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .msg-system {{ color: #8b949e; font-size: 13px; }}\
     .editor {{ border-top: 1px solid #21262d; background: #0d1117; flex-shrink: 0; }}\
     .editor-inner {{ width: min(100%, 64rem); margin: 0 auto; }}\
-    .terminal-idle .messages {{ flex: 0 0 clamp(8rem, 22vh, 14rem); overflow: hidden; }}\
+    .terminal-idle .messages {{ flex: 0 0 clamp(10rem, 28vh, 17rem); overflow: hidden; }}\
     .terminal-idle .messages-inner {{ padding-bottom: 0; }}\
     .terminal-idle .editor {{ border-top: none; }}\
-    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin-left: max(2rem, 18vw); margin-right: auto; padding: 0 1rem 2rem; }}\
+    .terminal-idle .editor-inner {{ width: min(100%, 47rem); margin-left: max(2rem, 16vw); margin-right: auto; padding: 0 1rem 2rem; }}\
     .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; }}\
     .prompt-char {{ color: #3fb950; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
     .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #c9d1d9; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; }}\
     .editor-input textarea:focus {{ outline: none; }}\
     .editor-input textarea::placeholder {{ color: #484f58; }}\
     .session-intro {{ display: grid; gap: 0.55rem; padding: 0 1rem 1.2rem; }}\
-    .session-kicker {{ color: #8b949e; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: clamp(1.1rem, 2vw, 1.45rem); font-weight: 600; letter-spacing: -0.02em; }}\
-    .session-meta {{ color: #6e7681; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.95rem; }}\
+    .session-kicker {{ color: #8b949e; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: clamp(1.05rem, 1.9vw, 1.35rem); font-weight: 600; letter-spacing: -0.02em; }}\
+    .session-meta {{ color: #6e7681; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.93rem; display: inline-flex; align-items: center; gap: 0.55rem; }}\
+    .session-icon {{ color: #5b616b; width: 0.85rem; display: inline-flex; justify-content: center; flex-shrink: 0; }}\
     .editor-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 1rem 0.9rem; }}\
     .model-picker {{ display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }}\
     .footer-label {{ color: #6e7681; font-size: 12px; text-transform: lowercase; }}\
     .model-select {{ width: auto; min-width: 11rem; background: transparent; border: none; color: #8b949e; font-size: 12px; padding: 0 1.15rem 0 0; cursor: pointer; }}\
     .model-select:focus {{ outline: none; color: #c9d1d9; }}\
+    .footer-mode {{ color: #8b949e; font-size: 12px; white-space: nowrap; }}\
     .footer-actions {{ display: inline-flex; align-items: center; gap: 0.85rem; min-width: 0; }}\
     .footer-link {{ background: transparent; color: #6e7681; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; }}\
     .footer-link:hover {{ background: transparent; color: #c9d1d9; }}\
     .footer-meta {{ color: #484f58; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
-    .terminal-idle .editor-input {{ border: 1px solid #2b3137; border-radius: 12px 12px 0 0; background: #17131a; padding-top: 1rem; min-height: 3.3rem; }}\
-    .terminal-idle .editor-footer {{ border: 1px solid #2b3137; border-top: none; border-radius: 0 0 12px 12px; background: #17131a; padding-bottom: 0.95rem; }}\
+    .terminal-idle .editor-input {{ border: 1px solid #312b34; border-radius: 12px 12px 0 0; background: #19151d; padding-top: 1rem; min-height: 3.55rem; }}\
+    .terminal-idle .editor-footer {{ border: 1px solid #312b34; border-top: none; border-radius: 0 0 12px 12px; background: #19151d; padding-bottom: 0.95rem; }}\
     .settings-panel {{ position: fixed; inset: 0; background: #0d1117; z-index: 20; overflow-y: auto; }}\
     .settings-shell {{ width: min(100%, 42rem); margin: 0 auto; }}\
     .settings-head {{ display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #21262d; }}\
@@ -1156,7 +1169,6 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .settings-copy {{ color: #6e7681; font-size: 13px; padding: 0.85rem 1rem 0; }}\
     .device-info {{ color: #484f58; font-size: 12px; padding: 1rem; }}\
     @media (max-width: 640px) {{\
-      .shell-header {{ padding-inline: 0.7rem; }}\
       .shell-header-right {{ display: none; }}\
       .terminal-idle .messages {{ flex-basis: 22vh; }}\
       .terminal-idle .editor-inner {{ width: auto; margin-left: 1rem; margin-right: 1rem; padding-bottom: 1.25rem; }}\
