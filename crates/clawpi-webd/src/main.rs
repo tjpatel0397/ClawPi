@@ -83,36 +83,24 @@ const OPENROUTER_MODELS: &[UiModelOption] = &[
         label: "Claude Opus 4.6",
     },
     UiModelOption {
-        id: "anthropic/claude-sonnet-4.6",
+        id: "anthropic/claude-sonnet-4-6",
         label: "Claude Sonnet 4.6",
     },
     UiModelOption {
-        id: "anthropic/claude-sonnet-4-5-20250929",
-        label: "Claude Sonnet 4.5",
-    },
-    UiModelOption {
-        id: "anthropic/claude-haiku-4-5-20251001",
-        label: "Claude Haiku 4.5",
+        id: "openai/gpt-5.4",
+        label: "GPT-5.4",
     },
     UiModelOption {
         id: "openai/gpt-5.2",
         label: "GPT-5.2",
     },
     UiModelOption {
-        id: "openai/gpt-5-mini",
-        label: "GPT-5 mini",
+        id: "google/gemini-3.1-pro",
+        label: "Gemini 3.1 Pro",
     },
     UiModelOption {
-        id: "openai/o4-mini",
-        label: "o4-mini",
-    },
-    UiModelOption {
-        id: "google/gemini-2.5-pro",
-        label: "Gemini 2.5 Pro",
-    },
-    UiModelOption {
-        id: "google/gemini-2.5-flash",
-        label: "Gemini 2.5 Flash",
+        id: "google/gemini-3.1-flash",
+        label: "Gemini 3.1 Flash",
     },
     UiModelOption {
         id: "meta-llama/llama-4-maverick",
@@ -123,20 +111,20 @@ const OPENROUTER_MODELS: &[UiModelOption] = &[
         label: "Llama 4 Scout",
     },
     UiModelOption {
+        id: "deepseek/deepseek-v4",
+        label: "DeepSeek V4",
+    },
+    UiModelOption {
         id: "deepseek/deepseek-r1",
         label: "DeepSeek R1",
     },
     UiModelOption {
-        id: "deepseek/deepseek-chat-v3-0324",
-        label: "DeepSeek V3",
+        id: "mistralai/mistral-large-3",
+        label: "Mistral Large 3",
     },
     UiModelOption {
-        id: "mistralai/mistral-large-2411",
-        label: "Mistral Large",
-    },
-    UiModelOption {
-        id: "qwen/qwen-2.5-72b-instruct",
-        label: "Qwen 2.5 72B",
+        id: "moonshot/kimi-k2.5",
+        label: "Kimi K2.5",
     },
 ];
 
@@ -149,97 +137,53 @@ const ANTHROPIC_MODELS: &[UiModelOption] = &[
         id: "claude-sonnet-4-6",
         label: "Claude Sonnet 4.6",
     },
-    UiModelOption {
-        id: "claude-sonnet-4-5-20250929",
-        label: "Claude Sonnet 4.5",
-    },
-    UiModelOption {
-        id: "claude-haiku-4-5-20251001",
-        label: "Claude Haiku 4.5",
-    },
 ];
 
 const OPENAI_MODELS: &[UiModelOption] = &[
+    UiModelOption {
+        id: "gpt-5.4",
+        label: "GPT-5.4",
+    },
     UiModelOption {
         id: "gpt-5.2",
         label: "GPT-5.2",
     },
     UiModelOption {
-        id: "gpt-5-mini",
-        label: "GPT-5 mini",
-    },
-    UiModelOption {
         id: "o4-mini",
         label: "o4-mini",
-    },
-    UiModelOption {
-        id: "o3",
-        label: "o3",
-    },
-    UiModelOption {
-        id: "o3-mini",
-        label: "o3-mini",
-    },
-    UiModelOption {
-        id: "gpt-4.1",
-        label: "GPT-4.1",
-    },
-    UiModelOption {
-        id: "gpt-4.1-mini",
-        label: "GPT-4.1 mini",
     },
 ];
 
 const OPENAI_CODEX_MODELS: &[UiModelOption] = &[
     UiModelOption {
+        id: "gpt-5.3-codex",
+        label: "GPT-5.3 Codex",
+    },
+    UiModelOption {
         id: "gpt-5.2-codex",
         label: "GPT-5.2 Codex",
-    },
-    UiModelOption {
-        id: "gpt-5-codex",
-        label: "GPT-5 Codex",
-    },
-    UiModelOption {
-        id: "o4-mini",
-        label: "o4-mini",
-    },
-    UiModelOption {
-        id: "o3",
-        label: "o3",
     },
 ];
 
 const GEMINI_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "gemini-2.5-pro",
-        label: "Gemini 2.5 Pro",
+        id: "gemini-3.1-pro",
+        label: "Gemini 3.1 Pro",
     },
     UiModelOption {
-        id: "gemini-2.5-flash",
-        label: "Gemini 2.5 Flash",
-    },
-    UiModelOption {
-        id: "gemini-2.0-flash",
-        label: "Gemini 2.0 Flash",
+        id: "gemini-3.1-flash",
+        label: "Gemini 3.1 Flash",
     },
 ];
 
 const GROQ_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "llama-3.3-70b-versatile",
-        label: "Llama 3.3 70B",
+        id: "llama-4-maverick-17b-128e",
+        label: "Llama 4 Maverick",
     },
     UiModelOption {
-        id: "llama-3.1-8b-instant",
-        label: "Llama 3.1 8B",
-    },
-    UiModelOption {
-        id: "mixtral-8x7b-32768",
-        label: "Mixtral 8x7B",
-    },
-    UiModelOption {
-        id: "gemma2-9b-it",
-        label: "Gemma 2 9B",
+        id: "llama-4-scout-17b-16e",
+        label: "Llama 4 Scout",
     },
     UiModelOption {
         id: "deepseek-r1-distill-llama-70b",
@@ -249,32 +193,35 @@ const GROQ_MODELS: &[UiModelOption] = &[
 
 const OLLAMA_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "llama3.2",
-        label: "Llama 3.2",
+        id: "llama4:maverick",
+        label: "Llama 4 Maverick",
     },
     UiModelOption {
-        id: "llama3.1",
-        label: "Llama 3.1",
+        id: "llama4:scout",
+        label: "Llama 4 Scout",
+    },
+    UiModelOption {
+        id: "gemma4",
+        label: "Gemma 4",
+    },
+    UiModelOption {
+        id: "deepseek-r1:7b",
+        label: "DeepSeek R1 7B",
     },
     UiModelOption {
         id: "mistral",
         label: "Mistral",
     },
+];
+
+const KIMI_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "qwen2.5-coder:7b",
-        label: "Qwen 2.5 Coder 7B",
+        id: "kimi-k2.5",
+        label: "Kimi K2.5",
     },
     UiModelOption {
-        id: "gemma2",
-        label: "Gemma 2",
-    },
-    UiModelOption {
-        id: "phi3",
-        label: "Phi-3",
-    },
-    UiModelOption {
-        id: "deepseek-r1:7b",
-        label: "DeepSeek R1 7B",
+        id: "kimi-k2",
+        label: "Kimi K2",
     },
 ];
 
@@ -296,7 +243,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "Claude direct",
         route_editable: false,
         route_placeholder: "anthropic",
-        default_model: "claude-sonnet-4-5-20250929",
+        default_model: "claude-sonnet-4-6",
         default_auth: AUTH_MODE_API_KEY,
         auth_options: &[AUTH_ANTHROPIC_KEY],
         models: ANTHROPIC_MODELS,
@@ -307,7 +254,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "GPT direct",
         route_editable: false,
         route_placeholder: "openai",
-        default_model: "gpt-5.2",
+        default_model: "gpt-5.4",
         default_auth: AUTH_MODE_API_KEY,
         auth_options: &[AUTH_API_KEY],
         models: OPENAI_MODELS,
@@ -318,7 +265,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "ChatGPT account",
         route_editable: false,
         route_placeholder: "openai-codex",
-        default_model: "gpt-5-codex",
+        default_model: "gpt-5.3-codex",
         default_auth: AUTH_MODE_DEVICE_LOGIN,
         auth_options: &[AUTH_DEVICE_LOGIN],
         models: OPENAI_CODEX_MODELS,
@@ -329,7 +276,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "Key or device login",
         route_editable: false,
         route_placeholder: "gemini",
-        default_model: "gemini-2.5-flash",
+        default_model: "gemini-3.1-flash",
         default_auth: AUTH_MODE_API_KEY,
         auth_options: &[AUTH_API_KEY, AUTH_DEVICE_LOGIN],
         models: GEMINI_MODELS,
@@ -340,10 +287,21 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "Fast inference",
         route_editable: false,
         route_placeholder: "groq",
-        default_model: "llama-3.3-70b-versatile",
+        default_model: "llama-4-maverick-17b-128e",
         default_auth: AUTH_MODE_API_KEY,
         auth_options: &[AUTH_API_KEY],
         models: GROQ_MODELS,
+    },
+    UiProviderPreset {
+        id: "kimi",
+        label: "Kimi",
+        hint: "Moonshot AI",
+        route_editable: false,
+        route_placeholder: "kimi",
+        default_model: "kimi-k2.5",
+        default_auth: AUTH_MODE_API_KEY,
+        auth_options: &[AUTH_API_KEY],
+        models: KIMI_MODELS,
     },
     UiProviderPreset {
         id: "ollama",
@@ -351,7 +309,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "Local on this device",
         route_editable: false,
         route_placeholder: "ollama",
-        default_model: "llama3.2",
+        default_model: "llama4:maverick",
         default_auth: AUTH_MODE_LOCAL,
         auth_options: &[AUTH_LOCAL],
         models: OLLAMA_MODELS,
@@ -713,28 +671,43 @@ fn render_chat_view(
 ) -> String {
     let ai_form = render_ai_form(config, "console-ai", "Save", "update");
     let transcript_html = render_transcript(last_prompt, answer);
+    let model_label = config.ai_model.as_deref().unwrap_or("unknown");
+    let provider_label = config.ai_provider.as_deref().unwrap_or("unknown");
 
     format!(
-        "{notice_html}\
-         {error_html}\
-         <div class=\"transcript\">{transcript_html}</div>\
-         <form method=\"post\" action=\"/prompt\" class=\"composer\">\
-           <textarea id=\"prompt\" name=\"prompt\" rows=\"3\" placeholder=\"Ask Claw anything...\" autofocus>{draft_prompt}</textarea>\
-           <div class=\"composer-row\">\
-             <button type=\"submit\">Send</button>\
+        "<div class=\"terminal\">\
+           <div class=\"terminal-output\" id=\"output\">\
+             {notice_html}\
+             {error_html}\
+             {transcript_html}\
            </div>\
-         </form>\
-         <details class=\"settings\">\
-           <summary>&gt; settings</summary>\
+           <div class=\"terminal-input\">\
+             <form method=\"post\" action=\"/prompt\" class=\"input-line\" id=\"prompt-form\">\
+               <span class=\"input-prefix\">&gt;</span>\
+               <textarea id=\"prompt\" name=\"prompt\" rows=\"1\" placeholder=\"Message Claw... (type /help for commands)\" autofocus>{draft_prompt}</textarea>\
+             </form>\
+           </div>\
+           <div class=\"statusbar\">\
+             <span>{provider_label}/{model_label}</span>\
+             <span>{device_name} · {wifi_ssid}</span>\
+           </div>\
+         </div>\
+         <div class=\"settings-panel is-hidden\" id=\"settings-panel\">\
+           <div class=\"settings-header\">\
+             <span>Settings</span>\
+             <button type=\"button\" onclick=\"document.getElementById('settings-panel').classList.add('is-hidden')\">Close</button>\
+           </div>\
            {ai_form}\
-         </details>\
-         {device_info}",
+         </div>",
         notice_html = notice_html,
         error_html = error_html,
-        ai_form = ai_form,
         transcript_html = transcript_html,
         draft_prompt = escape_html(draft_prompt.unwrap_or("")),
-        device_info = render_device_info(config, wifi_ssid),
+        provider_label = escape_html(provider_label),
+        model_label = escape_html(model_label),
+        device_name = escape_html(&config.device_name),
+        wifi_ssid = escape_html(wifi_ssid),
+        ai_form = ai_form,
     )
 }
 
@@ -962,35 +935,44 @@ fn render_document(device_name: &str, body_html: &str) -> String {
   <title>{device_name} · ClawPi</title>\
   <style>\
     :root {{ color-scheme: dark; }}\
-    * {{ box-sizing: border-box; }}\
-    body {{ margin: 0; min-height: 100vh; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.6; }}\
-    main {{ max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem; }}\
-    .hint {{ color: #8b949e; font-size: 13px; margin-bottom: 1.5rem; }}\
-    .notice {{ padding: 0.6rem 0.8rem; margin-bottom: 1rem; }}\
-    .notice-ok {{ color: #3fb950; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); }}\
-    .notice-error {{ color: #f85149; background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); }}\
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}\
+    body {{ height: 100vh; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.5; overflow: hidden; }}\
+    main {{ height: 100vh; display: flex; flex-direction: column; }}\
+    .hint {{ color: #8b949e; font-size: 13px; padding: 1.5rem 1rem 0; }}\
+    .notice {{ padding: 0.5rem 0.8rem; margin: 0.5rem 1rem 0; font-size: 13px; }}\
+    .notice-ok {{ color: #3fb950; background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.2); }}\
+    .notice-error {{ color: #f85149; background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.2); }}\
     label {{ display: block; color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}\
     .field {{ display: grid; gap: 0.3rem; }}\
-    input, select, textarea {{ width: 100%; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; padding: 0.6rem 0.75rem; font: inherit; }}\
+    input, select, textarea {{ width: 100%; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; padding: 0.5rem 0.6rem; font: inherit; font-size: 14px; }}\
     input:focus, select:focus, textarea:focus {{ outline: none; border-color: #3fb950; }}\
-    select {{ cursor: pointer; -webkit-appearance: none; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem; }}\
+    select {{ cursor: pointer; -webkit-appearance: none; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.6rem center; padding-right: 1.8rem; }}\
     select option {{ background: #161b22; color: #c9d1d9; }}\
-    textarea {{ resize: vertical; min-height: 5rem; }}\
-    button {{ padding: 0.6rem 1rem; background: #3fb950; color: #0d1117; border: none; font: inherit; font-weight: 600; cursor: pointer; }}\
+    button {{ padding: 0.5rem 0.8rem; background: #3fb950; color: #0d1117; border: none; font: inherit; font-weight: 600; cursor: pointer; }}\
     button:hover {{ background: #2ea043; }}\
-    .form-stack {{ display: grid; gap: 1rem; }}\
+    .form-stack {{ display: grid; gap: 0.8rem; padding: 1rem; }}\
     .is-hidden {{ display: none !important; }}\
-    .transcript {{ border: 1px solid #30363d; padding: 1rem; margin-bottom: 1rem; min-height: 12rem; }}\
-    .msg {{ padding: 0.4rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }}\
-    .msg-user .msg-prefix {{ color: #3fb950; }}\
-    .msg-claw .msg-prefix {{ color: #d2a8ff; }}\
-    .msg-empty {{ color: #8b949e; }}\
-    .composer {{ display: grid; gap: 0.6rem; }}\
-    .composer-row {{ display: flex; justify-content: flex-end; }}\
-    .settings {{ border-top: 1px solid #30363d; margin-top: 1.5rem; padding-top: 1rem; }}\
-    .settings summary {{ cursor: pointer; color: #8b949e; font-size: 13px; list-style: none; }}\
-    .settings summary::-webkit-details-marker {{ display: none; }}\
-    .settings[open] summary {{ margin-bottom: 1rem; }}\
+    .terminal {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
+    .terminal-output {{ flex: 1; overflow-y: auto; padding: 1rem; }}\
+    .terminal-output::-webkit-scrollbar {{ width: 6px; }}\
+    .terminal-output::-webkit-scrollbar-track {{ background: transparent; }}\
+    .terminal-output::-webkit-scrollbar-thumb {{ background: #30363d; border-radius: 3px; }}\
+    .msg {{ padding: 0.3rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }}\
+    .msg-user .msg-prefix {{ color: #3fb950; font-weight: 600; }}\
+    .msg-claw .msg-prefix {{ color: #d2a8ff; font-weight: 600; }}\
+    .msg-empty {{ color: #484f58; font-style: italic; }}\
+    .msg-system {{ color: #8b949e; font-size: 13px; padding: 0.2rem 0; }}\
+    .terminal-input {{ border-top: 1px solid #21262d; padding: 0.6rem 1rem; background: #0d1117; }}\
+    .input-line {{ display: flex; align-items: flex-start; gap: 0.5rem; }}\
+    .input-prefix {{ color: #3fb950; font-weight: 600; padding-top: 0.15rem; flex-shrink: 0; }}\
+    .input-line textarea {{ border: none; background: transparent; color: #c9d1d9; padding: 0; resize: none; min-height: 1.5em; overflow: hidden; }}\
+    .input-line textarea:focus {{ outline: none; border-color: transparent; }}\
+    .statusbar {{ display: flex; justify-content: space-between; padding: 0.25rem 1rem; background: #161b22; border-top: 1px solid #21262d; color: #484f58; font-size: 12px; }}\
+    .settings-panel {{ position: fixed; inset: 0; background: #0d1117; z-index: 20; overflow-y: auto; }}\
+    .settings-header {{ display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid #21262d; }}\
+    .settings-header span {{ color: #8b949e; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }}\
+    .settings-header button {{ background: transparent; color: #8b949e; font-size: 13px; }}\
+    .settings-header button:hover {{ color: #c9d1d9; background: transparent; }}\
     .device-info {{ color: #8b949e; font-size: 12px; margin-top: 2rem; border-top: 1px solid #21262d; padding-top: 0.75rem; }}\
   </style>\
 </head>\
@@ -1151,6 +1133,58 @@ fn render_ui_script() -> String {
   }
 
   document.querySelectorAll(".ai-config-form").forEach(initForm);
+
+  // Auto-resize textarea to content
+  var prompt = document.getElementById("prompt");
+  if (prompt) {
+    function autoResize() {
+      prompt.style.height = "auto";
+      prompt.style.height = prompt.scrollHeight + "px";
+    }
+    prompt.addEventListener("input", autoResize);
+    autoResize();
+
+    // Enter to submit, Shift+Enter for newline
+    var form = document.getElementById("prompt-form");
+    if (form) {
+      prompt.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          var text = prompt.value.trim();
+          if (!text) return;
+
+          // Slash commands handled client-side
+          if (text === "/help") {
+            e.preventDefault();
+            var output = document.getElementById("output");
+            if (output) {
+              output.innerHTML += '<div class="msg msg-system">Commands: /settings /help</div>';
+              output.scrollTop = output.scrollHeight;
+            }
+            prompt.value = "";
+            autoResize();
+            return;
+          }
+          if (text === "/settings") {
+            e.preventDefault();
+            var panel = document.getElementById("settings-panel");
+            if (panel) panel.classList.remove("is-hidden");
+            prompt.value = "";
+            autoResize();
+            return;
+          }
+
+          form.submit();
+        }
+      });
+    }
+  }
+
+  // Scroll transcript to bottom on load
+  var output = document.getElementById("output");
+  if (output) {
+    output.scrollTop = output.scrollHeight;
+  }
 })();"#,
     )
 }
