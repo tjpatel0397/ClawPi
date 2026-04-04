@@ -250,7 +250,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
     },
     UiProviderPreset {
         id: "openai",
-        label: "OpenAI",
+        label: "OpenAI API",
         hint: "GPT direct",
         route_editable: false,
         route_placeholder: "openai",
@@ -261,7 +261,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
     },
     UiProviderPreset {
         id: "openai-codex",
-        label: "OpenAI Codex",
+        label: "OpenAI ChatGPT",
         hint: "ChatGPT account",
         route_editable: false,
         route_placeholder: "openai-codex",
@@ -511,15 +511,35 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
         }
         ("POST", "/switch-model") => {
             let fields = parse_form_urlencoded(&String::from_utf8_lossy(&request.body));
-            if let Some(model) = fields
-                .get("model")
+            if let Some(selection) = fields
+                .get("selection")
                 .map(|value| value.trim())
                 .filter(|value| !value.is_empty())
             {
-                let provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
-                if let Err(err) =
-                    set_ai_profile(layout, provider, Some(model), config.ai_api_key.as_deref())
-                {
+                if let Some((provider, model)) = decode_model_selection(selection) {
+                    if let Err(err) = set_ai_profile(
+                        layout,
+                        provider,
+                        Some(model),
+                        config.ai_api_key.as_deref(),
+                    ) {
+                        write_http_response(
+                            stream,
+                            "422 Unprocessable Entity",
+                            "text/html; charset=utf-8",
+                            render_home_page(
+                                layout,
+                                config,
+                                None,
+                                Some(&format!("failed to switch model: {err}")),
+                                None,
+                                None,
+                                None,
+                            )?,
+                        )?;
+                        return Ok(());
+                    }
+                } else {
                     write_http_response(
                         stream,
                         "422 Unprocessable Entity",
@@ -528,7 +548,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                             layout,
                             config,
                             None,
-                            Some(&format!("failed to switch model: {err}")),
+                            Some("failed to switch model: invalid selection"),
                             None,
                             None,
                             None,
@@ -712,8 +732,7 @@ fn render_chat_view(
     let ai_form = render_ai_form(config, "console-ai", "Save", "update");
     let has_transcript = last_prompt.is_some() || answer.is_some();
     let transcript_html = render_transcript(last_prompt, answer);
-    let provider_label = current_provider_label(config);
-    let model_options_html = render_current_model_options(config);
+    let model_options_html = render_model_switch_options(config);
     let session_summary = render_session_summary(last_prompt, answer);
     let terminal_class = if has_transcript {
         "terminal"
@@ -782,15 +801,13 @@ fn render_chat_view(
                    {session_meta_html}\
                    <form method=\"post\" action=\"/prompt\" class=\"editor-input\" id=\"prompt-form\">\
                      <span class=\"prompt-char\">&gt;</span>\
-                     <textarea id=\"prompt\" name=\"prompt\" rows=\"1\" placeholder=\"Ask anything... \\\"Help me debug this issue\\\"\" autofocus>{draft_prompt}</textarea>\
+                     <textarea id=\"prompt\" name=\"prompt\" rows=\"1\" placeholder=\"Ask me anything\" autofocus>{draft_prompt}</textarea>\
                    </form>\
                    <div class=\"editor-footer\">\
                    <form method=\"post\" action=\"/switch-model\" class=\"model-picker\" id=\"model-switch-form\">\
-                       <span class=\"footer-label\">{provider_label}</span>\
-                       <select id=\"model-switcher\" class=\"model-select\" name=\"model\">\
+                       <select id=\"model-switcher\" class=\"model-select\" name=\"selection\" aria-label=\"Select model\">\
                          {model_options_html}\
                        </select>\
-                       <span class=\"footer-mode\">Default</span>\
                      </form>\
                      <div class=\"footer-actions\">\
                        <button type=\"button\" class=\"footer-link\" id=\"open-settings\">settings</button>\
@@ -815,7 +832,6 @@ fn render_chat_view(
         transcript_html = transcript_html,
         session_meta_html = session_meta_html,
         draft_prompt = escape_html(draft_prompt.unwrap_or("")),
-        provider_label = escape_html(provider_label),
         ai_form = ai_form,
         model_options_html = model_options_html,
     )
@@ -916,34 +932,39 @@ fn render_device_info(config: &ClawPiConfig, wifi_ssid: &str) -> String {
     )
 }
 
-fn current_provider_label(config: &ClawPiConfig) -> &'static str {
-    let current_provider = config.ai_provider.as_deref().unwrap_or("");
-    PROVIDER_PRESETS
-        .iter()
-        .find(|preset| preset.id.eq_ignore_ascii_case(current_provider))
-        .map(|preset| preset.label)
-        .unwrap_or("Model")
+fn display_provider_label(preset: &UiProviderPreset) -> &'static str {
+    match preset.id {
+        "openai" | "openai-codex" => "OpenAI",
+        _ => preset.label,
+    }
 }
 
-fn render_current_model_options(config: &ClawPiConfig) -> String {
+fn encode_model_selection(provider: &str, model: &str) -> String {
+    format!("{provider}@@{model}")
+}
+
+fn decode_model_selection(value: &str) -> Option<(&str, &str)> {
+    value.split_once("@@")
+}
+
+fn render_model_switch_options(config: &ClawPiConfig) -> String {
     let current_provider = config.ai_provider.as_deref().unwrap_or("");
     let current_model = config.ai_model.as_deref().unwrap_or("");
     let mut html = String::new();
-    if let Some(preset) = PROVIDER_PRESETS
-        .iter()
-        .find(|preset| preset.id.eq_ignore_ascii_case(current_provider))
-    {
+    for preset in PROVIDER_PRESETS {
         for model in preset.models {
-            let sel = if model.id == current_model {
+            let sel = if preset.id.eq_ignore_ascii_case(current_provider) && model.id == current_model
+            {
                 " selected"
             } else {
                 ""
             };
+            let value = encode_model_selection(preset.id, model.id);
             html.push_str(&format!(
                 "<option value=\"{value}\"{sel}>{label}</option>",
-                value = escape_html(model.id),
+                value = escape_html(&value),
                 sel = sel,
-                label = escape_html(model.label),
+                label = escape_html(&format!("{} {}", display_provider_label(preset), model.label)),
             ));
         }
     }
@@ -1158,7 +1179,6 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .footer-label {{ color: #a1a1aa; font-size: 12px; text-transform: lowercase; }}\
     .model-select {{ width: auto; min-width: 11rem; background: transparent; border: none; color: #d4d4d8; font-size: 12px; padding: 0 1.15rem 0 0; cursor: pointer; }}\
     .model-select:focus {{ outline: none; color: #fafafa; }}\
-    .footer-mode {{ color: #a1a1aa; font-size: 12px; white-space: nowrap; }}\
     .footer-actions {{ display: inline-flex; align-items: center; gap: 0.85rem; min-width: 0; }}\
     .footer-link {{ background: transparent; color: #a1a1aa; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; }}\
     .footer-link:hover {{ background: transparent; color: #fafafa; }}\
@@ -1400,45 +1420,33 @@ fn render_ui_script() -> String {
     var weatherNode = document.getElementById("session-weather");
     if (!weatherNode) return;
     var fallback = weatherNode.dataset.fallbackWeather || "Local weather unavailable";
-    if (!navigator.geolocation) {
-      weatherNode.textContent = fallback;
-      return;
-    }
 
-    navigator.geolocation.getCurrentPosition(function (position) {
-      var lat = position.coords.latitude;
-      var lon = position.coords.longitude;
-      var weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + encodeURIComponent(lat) + "&longitude=" + encodeURIComponent(lon) + "&current=temperature_2m,weather_code&temperature_unit=fahrenheit";
-      var geoUrl = "https://geocoding-api.open-meteo.com/v1/reverse?latitude=" + encodeURIComponent(lat) + "&longitude=" + encodeURIComponent(lon) + "&language=en&format=json";
+    fetch("https://ipapi.co/json/").then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (geo) {
+      if (!geo || typeof geo.latitude !== "number" || typeof geo.longitude !== "number") {
+        weatherNode.textContent = fallback;
+        return null;
+      }
 
-      Promise.all([
-        fetch(weatherUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
-        fetch(geoUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
-      ]).then(function (results) {
-        var weather = results[0];
-        var geo = results[1];
-        var city = "Local";
-        var region = "";
-        if (geo && geo.results && geo.results.length) {
-          city = geo.results[0].city || geo.results[0].name || city;
-          region = geo.results[0].admin1 || geo.results[0].country_code || "";
-        }
+      var city = geo.city || "Local";
+      var region = geo.region_code || geo.region || "";
+      var place = city + (region ? ", " + region : "");
+      var weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + encodeURIComponent(geo.latitude) + "&longitude=" + encodeURIComponent(geo.longitude) + "&current=temperature_2m,weather_code&temperature_unit=fahrenheit";
+
+      return fetch(weatherUrl).then(function (r) {
+        return r.ok ? r.json() : null;
+      }).then(function (weather) {
         if (!weather || !weather.current) {
-          weatherNode.textContent = city + (region ? ", " + region : "") + " • Weather unavailable";
+          weatherNode.textContent = place + " • Weather unavailable";
           return;
         }
         var temp = Math.round(weather.current.temperature_2m);
         var icon = weatherIcon(weather.current.weather_code);
-        weatherNode.textContent = city + (region ? ", " + region : "") + " • " + icon + " " + temp + "F";
-      }).catch(function () {
-        weatherNode.textContent = fallback;
+        weatherNode.textContent = place + " • " + icon + " " + temp + "F";
       });
-    }, function () {
+    }).catch(function () {
       weatherNode.textContent = fallback;
-    }, {
-      enableHighAccuracy: false,
-      timeout: 4000,
-      maximumAge: 900000
     });
   }
 
