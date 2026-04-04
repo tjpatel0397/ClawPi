@@ -510,63 +510,11 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
             }
         }
         ("POST", "/switch-model") => {
-            let fields = parse_form_urlencoded(&String::from_utf8_lossy(&request.body));
-            if let Some(selection) = fields
-                .get("selection")
-                .map(|value| value.trim())
-                .filter(|value| !value.is_empty())
-            {
-                if let Some((provider, model)) = decode_model_selection(selection) {
-                    if let Err(err) = set_ai_profile(
-                        layout,
-                        provider,
-                        Some(model),
-                        config.ai_api_key.as_deref(),
-                    ) {
-                        write_http_response(
-                            stream,
-                            "422 Unprocessable Entity",
-                            "text/html; charset=utf-8",
-                            render_home_page(
-                                layout,
-                                config,
-                                None,
-                                Some(&format!("failed to switch model: {err}")),
-                                None,
-                                None,
-                                None,
-                            )?,
-                        )?;
-                        return Ok(());
-                    }
-                } else {
-                    write_http_response(
-                        stream,
-                        "422 Unprocessable Entity",
-                        "text/html; charset=utf-8",
-                        render_home_page(
-                            layout,
-                            config,
-                            None,
-                            Some("failed to switch model: invalid selection"),
-                            None,
-                            None,
-                            None,
-                        )?,
-                    )?;
-                    return Ok(());
-                }
-            }
-            let updated_state = inspect_state(layout)?;
-            let updated_config = updated_state.config_status.as_config().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "expected valid config after model switch")
-            })?;
-            write_runtime_status(layout, updated_config)?;
             write_http_response(
                 stream,
                 "200 OK",
                 "text/html; charset=utf-8",
-                render_home_page(layout, updated_config, None, None, None, None, None)?,
+                render_home_page(layout, config, None, None, None, None, None)?,
             )?;
         }
         ("POST", "/prompt") => {
@@ -805,7 +753,7 @@ fn render_chat_view(
                    </form>\
                    <div class=\"editor-footer\">\
                    <form method=\"post\" action=\"/switch-model\" class=\"model-picker\" id=\"model-switch-form\">\
-                       <select id=\"model-switcher\" class=\"model-select\" name=\"selection\" aria-label=\"Select model\">\
+                       <select id=\"model-switcher\" class=\"model-select\" name=\"selection\" aria-label=\"Configured model\" disabled>\
                          {model_options_html}\
                        </select>\
                      </form>\
@@ -939,36 +887,25 @@ fn display_provider_label(preset: &UiProviderPreset) -> &'static str {
     }
 }
 
-fn encode_model_selection(provider: &str, model: &str) -> String {
-    format!("{provider}@@{model}")
-}
-
-fn decode_model_selection(value: &str) -> Option<(&str, &str)> {
-    value.split_once("@@")
+fn current_model_switch_label(config: &ClawPiConfig) -> String {
+    let current_provider = config.ai_provider.as_deref().unwrap_or("");
+    let current_model = config.ai_model.as_deref().unwrap_or("");
+    PROVIDER_PRESETS
+        .iter()
+        .find(|preset| preset.id.eq_ignore_ascii_case(current_provider))
+        .and_then(|preset| {
+            preset.models.iter().find(|model| model.id == current_model).map(|model| {
+                format!("{} {}", display_provider_label(preset), model.label)
+            })
+        })
+        .unwrap_or_else(|| String::from("Model unavailable"))
 }
 
 fn render_model_switch_options(config: &ClawPiConfig) -> String {
-    let current_provider = config.ai_provider.as_deref().unwrap_or("");
-    let current_model = config.ai_model.as_deref().unwrap_or("");
-    let mut html = String::new();
-    for preset in PROVIDER_PRESETS {
-        for model in preset.models {
-            let sel = if preset.id.eq_ignore_ascii_case(current_provider) && model.id == current_model
-            {
-                " selected"
-            } else {
-                ""
-            };
-            let value = encode_model_selection(preset.id, model.id);
-            html.push_str(&format!(
-                "<option value=\"{value}\"{sel}>{label}</option>",
-                value = escape_html(&value),
-                sel = sel,
-                label = escape_html(&format!("{} {}", display_provider_label(preset), model.label)),
-            ));
-        }
-    }
-    html
+    format!(
+        "<option value=\"configured\" selected>{label}</option>",
+        label = escape_html(&current_model_switch_label(config)),
+    )
 }
 
 fn render_provider_select_options(selected: &str) -> String {
@@ -1161,13 +1098,13 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .msg-system {{ color: #a1a1aa; font-size: 13px; }}\
     .editor {{ border-top: 1px solid #18181b; background: #09090b; flex-shrink: 0; }}\
     .editor-inner {{ width: min(100%, 64rem); margin: 0 auto; }}\
-    .terminal-idle .messages {{ flex: 0 0 clamp(14rem, 36vh, 24rem); overflow: hidden; }}\
+    .terminal-idle .messages {{ flex: 0 0 clamp(17rem, 42vh, 29rem); overflow: hidden; }}\
     .terminal-idle .messages-inner {{ padding-bottom: 0; }}\
     .terminal-idle .editor {{ border-top: none; }}\
-    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 2.5rem; }}\
-    .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; }}\
+    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 2rem; }}\
+    .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
     .prompt-char {{ color: #4ade80; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
-    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; }}\
+    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; font-family: inherit; letter-spacing: 0; }}\
     .editor-input textarea:focus {{ outline: none; }}\
     .editor-input textarea::placeholder {{ color: #71717a; }}\
     .session-intro {{ display: grid; gap: 0.7rem; padding: 0 0 1.2rem; }}\
@@ -1175,12 +1112,11 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .session-meta {{ color: #a1a1aa; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.55rem; }}\
     .session-summary {{ color: #71717a; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.9rem; line-height: 1.5; max-width: 42rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
     .editor-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 1rem 0.9rem; }}\
-    .model-picker {{ display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }}\
-    .footer-label {{ color: #a1a1aa; font-size: 12px; text-transform: lowercase; }}\
-    .model-select {{ width: auto; min-width: 11rem; background: transparent; border: none; color: #d4d4d8; font-size: 12px; padding: 0 1.15rem 0 0; cursor: pointer; }}\
+    .model-picker {{ display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
+    .model-select {{ width: auto; min-width: 13rem; background: transparent; border: none; color: #d4d4d8; font-size: 12px; padding: 0 0.2rem 0 0; cursor: default; pointer-events: none; opacity: 1; -webkit-text-fill-color: #d4d4d8; }}\
     .model-select:focus {{ outline: none; color: #fafafa; }}\
     .footer-actions {{ display: inline-flex; align-items: center; gap: 0.85rem; min-width: 0; }}\
-    .footer-link {{ background: transparent; color: #a1a1aa; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; }}\
+    .footer-link {{ background: transparent; color: #a1a1aa; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
     .footer-link:hover {{ background: transparent; color: #fafafa; }}\
     .terminal-idle .editor-input {{ border: 1px solid #27272a; border-radius: 14px 14px 0 0; background: #18181b; padding-top: 1rem; min-height: 3.55rem; }}\
     .terminal-idle .editor-footer {{ border: 1px solid #27272a; border-top: none; border-radius: 0 0 14px 14px; background: #18181b; padding-bottom: 0.95rem; }}\
@@ -1194,7 +1130,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .device-info {{ color: #71717a; font-size: 12px; padding: 1rem; }}\
     @media (max-width: 640px) {{\
       .shell-header-right {{ display: none; }}\
-      .terminal-idle .messages {{ flex-basis: 28vh; }}\
+      .terminal-idle .messages {{ flex-basis: 34vh; }}\
       .terminal-idle .editor-inner {{ width: auto; margin-left: 1rem; margin-right: 1rem; padding-bottom: 1.25rem; }}\
       .editor-footer {{ flex-direction: column; align-items: flex-start; }}\
       .footer-actions {{ width: 100%; justify-content: flex-end; }}\
@@ -1493,14 +1429,6 @@ fn render_ui_script() -> String {
         }
       });
     }
-  }
-
-  var modelSwitcher = document.getElementById("model-switcher");
-  var modelSwitchForm = document.getElementById("model-switch-form");
-  if (modelSwitcher && modelSwitchForm) {
-    modelSwitcher.addEventListener("change", function () {
-      modelSwitchForm.submit();
-    });
   }
 
   document.addEventListener("keydown", function (e) {
@@ -1810,7 +1738,7 @@ mod tests {
 
         let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
 
-        assert!(html.contains("placeholder=\"Ask anything..."));
+        assert!(html.contains("placeholder=\"Ask me anything\""));
         assert!(html.contains("id=\"model-switcher\""));
         assert!(html.contains(">settings</button>"));
         assert!(html.contains("id=\"open-settings-header\""));
@@ -1831,25 +1759,30 @@ mod tests {
     }
 
     #[test]
-    fn render_current_model_options_limits_choices_to_active_provider() {
+    fn render_model_switch_options_show_configured_model_label() {
         let mut config = base_config();
         config.ai_provider = Some(String::from("openai"));
         config.ai_model = Some(String::from("gpt-5.4"));
 
-        let html = render_current_model_options(&config);
+        let html = render_model_switch_options(&config);
 
-        assert!(html.contains("GPT-5.4"));
-        assert!(html.contains("GPT-5.2"));
-        assert!(!html.contains("Claude Sonnet 4.6"));
-        assert!(!html.contains("Llama 4 Maverick"));
+        assert!(html.contains("OpenAI GPT-5.4"));
+        assert!(!html.contains("OpenAI GPT-5.3 Codex"));
+        assert!(!html.contains("Anthropic Claude Sonnet 4.6"));
+        assert!(!html.contains("Ollama Llama 4 Maverick"));
     }
 
     #[test]
-    fn current_provider_label_uses_active_provider() {
+    fn render_model_switch_options_only_shows_active_configuration() {
         let mut config = base_config();
-        config.ai_provider = Some(String::from("anthropic"));
+        config.ai_provider = Some(String::from("openai-codex"));
+        config.ai_model = Some(String::from("gpt-5.3-codex"));
 
-        assert_eq!(current_provider_label(&config), "Anthropic");
+        let html = render_model_switch_options(&config);
+
+        assert!(html.contains("OpenAI GPT-5.3 Codex"));
+        assert!(!html.contains("Anthropic Claude Sonnet 4.6"));
+        assert!(!html.contains("Ollama Llama 4 Maverick"));
     }
 
     #[test]
