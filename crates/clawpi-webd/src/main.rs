@@ -1103,7 +1103,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 50px; }}\
     .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.95rem 1rem 0.95rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
     .prompt-char {{ color: #fafafa; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
-    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.7em; max-height: 10em; overflow-y: auto; font-size: 1.12rem; font-family: inherit; letter-spacing: 0; line-height: 1.45; }}\
+    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.7em; max-height: 10em; overflow-y: auto; font-size: 0.9rem; font-family: inherit; letter-spacing: 0; line-height: 1.45; }}\
     .editor-input textarea:focus {{ outline: none; }}\
     .editor-input textarea::placeholder {{ color: #71717a; }}\
     .session-intro {{ display: grid; gap: 0.7rem; padding: 0 0 1.2rem; }}\
