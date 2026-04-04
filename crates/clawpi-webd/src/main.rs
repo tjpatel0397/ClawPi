@@ -1101,9 +1101,9 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .terminal-idle .messages-inner {{ padding-bottom: 0; }}\
     .terminal-idle .editor {{ border-top: none; }}\
     .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 50px; }}\
-    .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.65rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
+    .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.95rem 1rem 0.95rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
     .prompt-char {{ color: #fafafa; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
-    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; font-family: inherit; letter-spacing: 0; }}\
+    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.7em; max-height: 10em; overflow-y: auto; font-size: 1.12rem; font-family: inherit; letter-spacing: 0; line-height: 1.45; }}\
     .editor-input textarea:focus {{ outline: none; }}\
     .editor-input textarea::placeholder {{ color: #71717a; }}\
     .session-intro {{ display: grid; gap: 0.7rem; padding: 0 0 1.2rem; }}\
@@ -1353,6 +1353,19 @@ fn render_ui_script() -> String {
     var weatherNode = document.getElementById("session-weather");
     if (!weatherNode) return;
     var fallback = weatherNode.dataset.fallbackWeather || "Local weather unavailable";
+    var cacheKey = "clawpi.weather.v1";
+    var cacheTtlMs = 2 * 60 * 60 * 1000;
+
+    try {
+      var cachedRaw = localStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        var cached = JSON.parse(cachedRaw);
+        if (cached && cached.text && cached.timestamp && (Date.now() - cached.timestamp) < cacheTtlMs) {
+          weatherNode.textContent = cached.text;
+          return;
+        }
+      }
+    } catch (_) {}
 
     fetch("https://ipapi.co/json/").then(function (r) {
       return r.ok ? r.json() : null;
@@ -1370,13 +1383,22 @@ fn render_ui_script() -> String {
       return fetch(weatherUrl).then(function (r) {
         return r.ok ? r.json() : null;
       }).then(function (weather) {
+        var text;
         if (!weather || !weather.current) {
-          weatherNode.textContent = place + " • Weather unavailable";
-          return;
+          text = place + " • Weather unavailable";
+          weatherNode.textContent = text;
+        } else {
+          var temp = Math.round(weather.current.temperature_2m);
+          var icon = weatherIcon(weather.current.weather_code);
+          text = place + " • " + icon + " " + temp + "F";
+          weatherNode.textContent = text;
         }
-        var temp = Math.round(weather.current.temperature_2m);
-        var icon = weatherIcon(weather.current.weather_code);
-        weatherNode.textContent = place + " • " + icon + " " + temp + "F";
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            text: text,
+            timestamp: Date.now()
+          }));
+        } catch (_) {}
       });
     }).catch(function () {
       weatherNode.textContent = fallback;
