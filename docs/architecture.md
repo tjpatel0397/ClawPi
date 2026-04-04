@@ -203,6 +203,8 @@ At the moment this looks like:
 - `clawpi.target` also starts `clawpi-webd`, which serves the local browser control surface at `http://<device-name>.local/`
 - if the AI fields are missing, `clawpi-webd` becomes a first-run setup shell that asks for the local Claw provider, model, and provider-specific auth
 - once those AI fields are present, `clawpi-webd` turns into a narrow local Claw console with a single prompt surface and tucked-away settings
+- the current proving-ground browser shell now uses a calmer dark theme, a bottom-anchored empty-state composer, and a lightweight idle state that shows the date, approximate local weather, and a one-line recent-session summary before the first prompt
+- the footer of that shell currently shows the single active configured provider/model pair only; it is intentionally not a full multi-provider switcher because the config contract still stores just one AI profile
 - today that local gateway is still intentionally narrow: it is more of an OS-owned proving-ground surface than a full agent runtime
 - the current prompt path now crosses a local runtime boundary: `clawpi-webd` sends prompt requests to `clawpi-agentd`, and `clawpi-agentd` hands those requests into an upstream ZeroClaw-based runtime
 - that proving-ground daemon now seeds a small ClawPi-owned workspace for ZeroClaw so the embedded runtime speaks and behaves like ClawPi instead of inheriting the stock upstream identity
@@ -211,6 +213,11 @@ At the moment this looks like:
 - that embedded runtime should own sessions, memory, tool use, shell access, and long-running task behavior, while `clawpi-webd` stays a front end
 - auth is only one slice of that work; ClawPi may still support raw API keys, local runtimes, and account-based sign-in flows later
 - `clawpi-recovery.target` now starts `clawpi-recoveryd`, which clears recovery state and redirects back into setup
+
+Two current architectural limitations are important:
+
+- `/etc/clawpi/config.toml` still only stores one `ai_provider`, one `ai_model`, and one secret
+- because of that, `clawpi-webd` can only expose one active configured route in the footer even though the long-term product direction likely needs multiple enabled routes and live switching
 
 This is a proving-ground path, not the final image design.
 

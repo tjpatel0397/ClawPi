@@ -90,6 +90,8 @@ The repo now includes:
 - local AI setup fields in the ClawPi config contract so the device can be given its provider, model, and provider-specific auth after Wi-Fi onboarding
 - a small browser-based local console that starts with AI setup and then turns into a focused prompt surface for talking to the device
 - a proving-ground `clawpi.local` flow that is now functional end-to-end as a setup-first handoff instead of a dense management page
+- a much calmer proving-ground browser shell with a dark neutral theme, bottom-anchored empty-state composer, tucked-away settings, and a single active-model footer row instead of an exposed management surface
+- an idle `clawpi.local` state that now shows local date, approximate weather, and a one-line recent-session summary before the first prompt
 - a first local `clawpi-agentd` service that moves prompt execution behind a Unix-socket runtime boundary under `/run/clawpi`
 - a minimal normal-mode runtime pair where `clawpi-sessiond` writes heartbeat state and `clawpi-agentd` now wraps upstream ZeroClaw as the proving-ground local agent runtime
 - a Pi install script that now bootstraps a newer Rust toolchain on-device when the distro `rustc` is too old for the embedded ZeroClaw runtime
@@ -112,7 +114,7 @@ for that deeper system integration, not the final architecture. In the current
 proving ground, `clawpi-agentd` now delegates prompt execution into upstream
 ZeroClaw instead of running a ClawPi-owned OpenAI tool loop directly.
 
-## Handoff note (2026-04-03)
+## Handoff note (2026-04-04)
 
 The current proving-ground browser flow is now architecturally closer to the
 right direction:
@@ -121,13 +123,17 @@ right direction:
 - the local page now starts with AI setup and then transitions into a simple prompt surface
 - provider selection is now meant to be provider-first and provider-specific instead of OpenAI-only
 - `clawpi-agentd` is the local runtime boundary and currently wraps upstream ZeroClaw
+- the normal-mode shell is now visually calmer and closer to the intended product direction than the earlier busy rewrite
 
-But the current browser experience is still not acceptable as product UX.
+But the current browser experience is still only a proving-ground shell.
 
-The latest `clawpi.local` rewrite is still too visually busy and still buggy.
-The next thread should treat the UI as unfinished and focus first on:
+The next thread should treat the UI foundation as materially improved but not
+feature-complete. The next priority should shift away from pure styling and
+toward runtime behavior and config limitations.
 
-- simplifying the setup screen further
-- fixing the provider/auth/model picker interactions in `crates/clawpi-webd/src/main.rs`
-- keeping the top-right device menu minimal
-- making the setup-to-console handoff feel calm and obvious before adding more surface area
+The immediate follow-up work should focus on:
+
+- fixing the remaining browser/runtime functionality around provider auth, model switching, and agent actions
+- deciding how ClawPi should persist more than one enabled provider/model pair instead of the current single active AI profile
+- wiring real device actions like Wi-Fi management and slash-command-driven system tasks through the local agent boundary
+- keeping the shell minimal while the underlying runtime behavior catches up

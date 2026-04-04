@@ -1,3 +1,11 @@
+mod ai;
+
+use ai::{
+    clear_pending_openai_codex_login, load_pending_openai_codex_login,
+    openai_codex_auth_profile_exists, poll_openai_codex_device_login,
+    start_openai_codex_device_login, validate_provider, OpenAiLoginPollResult, PendingOpenAiLogin,
+    OPENAI_CODEX_PROVIDER,
+};
 use clawpi_core::{
     ai_configured, device_hostname_label, inspect_state, local_url_for_device_name,
     read_optional_file, set_ai_profile, AgentPromptRequest, AgentPromptResponse, ClawPiConfig,
@@ -16,6 +24,10 @@ const AUTH_MODE_API_KEY: &str = "api_key";
 const AUTH_MODE_DEVICE_LOGIN: &str = "device_login";
 const AUTH_MODE_LOCAL: &str = "local";
 const AUTH_MODE_NO_KEY: &str = "no_key";
+const OAUTH_STATUS_PENDING: &str = "pending";
+const OAUTH_STATUS_COMPLETE: &str = "complete";
+const OAUTH_STATUS_ERROR: &str = "error";
+const OAUTH_STATUS_MISSING: &str = "missing";
 
 #[derive(Clone, Copy, Serialize)]
 struct UiAuthOption {
@@ -45,6 +57,23 @@ struct UiProviderPreset {
     models: &'static [UiModelOption],
 }
 
+#[derive(Clone)]
+struct AiFormState {
+    provider: String,
+    model: String,
+    auth_mode: String,
+    has_saved_secret: bool,
+}
+
+#[derive(Serialize)]
+struct OAuthStatusResponse<'a> {
+    status: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    interval_secs: Option<u64>,
+}
+
 const AUTH_API_KEY: UiAuthOption = UiAuthOption {
     id: AUTH_MODE_API_KEY,
     label: "API key",
@@ -63,7 +92,7 @@ const AUTH_ANTHROPIC_KEY: UiAuthOption = UiAuthOption {
 
 const AUTH_DEVICE_LOGIN: UiAuthOption = UiAuthOption {
     id: AUTH_MODE_DEVICE_LOGIN,
-    label: "Device login",
+    label: "OAuth login",
     secret_label: None,
     secret_placeholder: None,
     requires_secret: false,
@@ -141,27 +170,35 @@ const ANTHROPIC_MODELS: &[UiModelOption] = &[
 
 const OPENAI_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "gpt-5.4",
-        label: "GPT-5.4",
-    },
-    UiModelOption {
         id: "gpt-5.2",
         label: "GPT-5.2",
     },
     UiModelOption {
-        id: "o4-mini",
-        label: "o4-mini",
+        id: "gpt-5-mini",
+        label: "GPT-5 mini",
+    },
+    UiModelOption {
+        id: "gpt-5-nano",
+        label: "GPT-5 nano",
+    },
+    UiModelOption {
+        id: "gpt-5.2-codex",
+        label: "GPT-5.2 Codex",
     },
 ];
 
 const OPENAI_CODEX_MODELS: &[UiModelOption] = &[
     UiModelOption {
-        id: "gpt-5.3-codex",
-        label: "GPT-5.3 Codex",
+        id: "gpt-5-codex",
+        label: "GPT-5 Codex",
     },
     UiModelOption {
         id: "gpt-5.2-codex",
         label: "GPT-5.2 Codex",
+    },
+    UiModelOption {
+        id: "o4-mini",
+        label: "o4-mini",
     },
 ];
 
@@ -254,7 +291,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "GPT direct",
         route_editable: false,
         route_placeholder: "openai",
-        default_model: "gpt-5.4",
+        default_model: "gpt-5.2",
         default_auth: AUTH_MODE_API_KEY,
         auth_options: &[AUTH_API_KEY],
         models: OPENAI_MODELS,
@@ -265,7 +302,7 @@ const PROVIDER_PRESETS: &[UiProviderPreset] = &[
         hint: "ChatGPT account",
         route_editable: false,
         route_placeholder: "openai-codex",
-        default_model: "gpt-5.3-codex",
+        default_model: "gpt-5-codex",
         default_auth: AUTH_MODE_DEVICE_LOGIN,
         auth_options: &[AUTH_DEVICE_LOGIN],
         models: OPENAI_CODEX_MODELS,
@@ -439,15 +476,112 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                 render_status_text(layout, config)?,
             )?;
         }
+        ("GET", "/oauth/openai/status") => {
+            let response = match poll_openai_codex_device_login(layout)? {
+                OpenAiLoginPollResult::Missing => OAuthStatusResponse {
+                    status: OAUTH_STATUS_MISSING,
+                    error: None,
+                    interval_secs: None,
+                },
+                OpenAiLoginPollResult::Pending(pending) => OAuthStatusResponse {
+                    status: OAUTH_STATUS_PENDING,
+                    error: None,
+                    interval_secs: Some(pending.interval_secs),
+                },
+                OpenAiLoginPollResult::Complete { provider, model } => {
+                    let updated_config = set_ai_profile(layout, &provider, Some(&model), None)?;
+                    write_runtime_status(layout, &updated_config)?;
+                    OAuthStatusResponse {
+                        status: OAUTH_STATUS_COMPLETE,
+                        error: None,
+                        interval_secs: None,
+                    }
+                }
+                OpenAiLoginPollResult::Error(message) => OAuthStatusResponse {
+                    status: OAUTH_STATUS_ERROR,
+                    error: Some(message),
+                    interval_secs: None,
+                },
+            };
+            write_http_response(
+                stream,
+                "200 OK",
+                "application/json; charset=utf-8",
+                serde_json::to_string(&response)
+                    .map_err(|err| io::Error::other(err.to_string()))?,
+            )?;
+        }
+        ("POST", "/oauth/openai/cancel") => {
+            clear_pending_openai_codex_login(layout)?;
+            write_http_response(
+                stream,
+                "200 OK",
+                "text/html; charset=utf-8",
+                render_home_page(
+                    layout,
+                    config,
+                    Some("OpenAI login canceled."),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )?,
+            )?;
+        }
         ("POST", "/configure-ai") => {
             let fields = parse_form_urlencoded(&String::from_utf8_lossy(&request.body));
             let provider = resolve_provider(&fields);
-            let model = resolve_model(&fields);
+            let model = match resolve_model(&fields) {
+                Some(model) => model,
+                None => {
+                    write_http_response(
+                        stream,
+                        "422 Unprocessable Entity",
+                        "text/html; charset=utf-8",
+                        render_home_page(
+                            layout,
+                            config,
+                            None,
+                            Some("Choose a model to continue."),
+                            None,
+                            None,
+                            None,
+                            Some(&submitted_ai_form_state(
+                                config,
+                                &provider,
+                                "",
+                                fields.get("auth_mode").map_or("", String::as_str),
+                            )),
+                        )?,
+                    )?;
+                    return Ok(());
+                }
+            };
             let auth_mode = fields
                 .get("auth_mode")
                 .map(|value| value.trim())
                 .filter(|value| !value.is_empty())
                 .unwrap_or(AUTH_MODE_API_KEY);
+            let form_state = submitted_ai_form_state(config, &provider, &model, auth_mode);
+            if let Err(err) = ensure_supported_auth_mode(&provider, auth_mode) {
+                write_http_response(
+                    stream,
+                    "422 Unprocessable Entity",
+                    "text/html; charset=utf-8",
+                    render_home_page(
+                        layout,
+                        config,
+                        None,
+                        Some(&err.to_string()),
+                        None,
+                        None,
+                        None,
+                        Some(&form_state),
+                    )?,
+                )?;
+                return Ok(());
+            }
             let submitted_api_key = fields
                 .get("api_key")
                 .map(|value| value.trim())
@@ -467,13 +601,97 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                             None,
                             None,
                             None,
+                            Some(&form_state),
                         )?,
                     )?;
                     return Ok(());
                 }
             };
 
-            match set_ai_profile(layout, &provider, model.as_deref(), api_key.as_deref()) {
+            if provider.eq_ignore_ascii_case(OPENAI_CODEX_PROVIDER)
+                && auth_mode == AUTH_MODE_DEVICE_LOGIN
+            {
+                if openai_codex_auth_profile_exists(layout)? {
+                    if let Err(err) = validate_provider(layout, &provider, &model, None) {
+                        write_http_response(
+                            stream,
+                            "422 Unprocessable Entity",
+                            "text/html; charset=utf-8",
+                            render_home_page(
+                                layout,
+                                config,
+                                None,
+                                Some(&format!("OpenAI ChatGPT login is not ready: {err}")),
+                                None,
+                                None,
+                                None,
+                                Some(&form_state),
+                            )?,
+                        )?;
+                        return Ok(());
+                    }
+                } else {
+                    match start_openai_codex_device_login(layout, &model) {
+                        Ok(_) => {
+                            write_http_response(
+                                stream,
+                                "200 OK",
+                                "text/html; charset=utf-8",
+                                render_home_page(
+                                    layout,
+                                    config,
+                                    Some("OpenAI login started. Finish sign-in in your browser."),
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                    Some(&form_state),
+                                )?,
+                            )?;
+                        }
+                        Err(err) => {
+                            write_http_response(
+                                stream,
+                                "422 Unprocessable Entity",
+                                "text/html; charset=utf-8",
+                                render_home_page(
+                                    layout,
+                                    config,
+                                    None,
+                                    Some(&format!("failed to start OpenAI login: {err}")),
+                                    None,
+                                    None,
+                                    None,
+                                    Some(&form_state),
+                                )?,
+                            )?;
+                        }
+                    }
+                    return Ok(());
+                }
+            } else if let Err(err) =
+                validate_provider(layout, &provider, &model, api_key.as_deref())
+            {
+                write_http_response(
+                    stream,
+                    "422 Unprocessable Entity",
+                    "text/html; charset=utf-8",
+                    render_home_page(
+                        layout,
+                        config,
+                        None,
+                        Some(&format!("provider validation failed: {err}")),
+                        None,
+                        None,
+                        None,
+                        Some(&form_state),
+                    )?,
+                )?;
+                return Ok(());
+            }
+
+            clear_pending_openai_codex_login(layout).ok();
+            match set_ai_profile(layout, &provider, Some(&model), api_key.as_deref()) {
                 Ok(_) => {
                     let updated_state = inspect_state(layout)?;
                     let updated_config =
@@ -488,7 +706,16 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                         stream,
                         "200 OK",
                         "text/html; charset=utf-8",
-                        render_home_page(layout, updated_config, None, None, None, None, None)?,
+                        render_home_page(
+                            layout,
+                            updated_config,
+                            Some("AI provider saved and validated."),
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )?,
                     )?;
                 }
                 Err(err) => {
@@ -504,6 +731,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                             None,
                             None,
                             None,
+                            Some(&form_state),
                         )?,
                     )?;
                 }
@@ -514,7 +742,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                 stream,
                 "200 OK",
                 "text/html; charset=utf-8",
-                render_home_page(layout, config, None, None, None, None, None)?,
+                render_home_page(layout, config, None, None, None, None, None, None)?,
             )?;
         }
         ("POST", "/prompt") => {
@@ -531,6 +759,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                         config,
                         None,
                         Some("prompt must not be empty"),
+                        None,
                         None,
                         None,
                         None,
@@ -553,6 +782,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                             None,
                             Some(prompt),
                             Some(&reply),
+                            None,
                         )?,
                     )?;
                 }
@@ -569,6 +799,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                             Some(prompt),
                             None,
                             None,
+                            None,
                         )?,
                     )?;
                 }
@@ -579,7 +810,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                 stream,
                 "200 OK",
                 "text/html; charset=utf-8",
-                render_home_page(layout, config, None, None, None, None, None)?,
+                render_home_page(layout, config, None, None, None, None, None, None)?,
             )?;
         }
     }
@@ -607,15 +838,20 @@ fn render_status_text(layout: &Layout, config: &ClawPiConfig) -> io::Result<Stri
 }
 
 fn render_home_page(
-    _layout: &Layout,
+    layout: &Layout,
     config: &ClawPiConfig,
     notice: Option<&str>,
     error: Option<&str>,
     draft_prompt: Option<&str>,
     last_prompt: Option<&str>,
     answer: Option<&str>,
+    form_state_override: Option<&AiFormState>,
 ) -> io::Result<String> {
-    let ai_ready = ai_configured(config);
+    let pending_openai_login = load_pending_openai_codex_login(layout)?;
+    let ai_form_state = form_state_override
+        .cloned()
+        .unwrap_or_else(|| default_ai_form_state(config, pending_openai_login.as_ref()));
+    let ai_ready = ai_runtime_ready(layout, config, pending_openai_login.as_ref())?;
     let wifi_ssid = config.wifi_ssid.as_deref().unwrap_or("unset");
 
     let notice_html = notice
@@ -639,9 +875,17 @@ fn render_home_page(
             draft_prompt,
             last_prompt,
             answer,
+            &ai_form_state,
         )
     } else {
-        render_setup_view(config, wifi_ssid, &notice_html, &error_html)
+        render_setup_view(
+            config,
+            wifi_ssid,
+            &notice_html,
+            &error_html,
+            &ai_form_state,
+            pending_openai_login.as_ref(),
+        )
     };
 
     Ok(render_document(&config.device_name, &body_html))
@@ -652,17 +896,22 @@ fn render_setup_view(
     wifi_ssid: &str,
     notice_html: &str,
     error_html: &str,
+    ai_form_state: &AiFormState,
+    pending_openai_login: Option<&PendingOpenAiLogin>,
 ) -> String {
-    let ai_form = render_ai_form(config, "setup-ai", "Continue", "setup");
+    let ai_form = render_ai_form(config, "setup-ai", "Continue", "setup", ai_form_state);
+    let pending_html = render_pending_openai_login(pending_openai_login);
 
     format!(
         "<div class=\"hint\">Set up your AI provider to get started.</div>\
          {notice_html}\
          {error_html}\
+         {pending_html}\
          {ai_form}\
          {device_info}",
         notice_html = notice_html,
         error_html = error_html,
+        pending_html = pending_html,
         ai_form = ai_form,
         device_info = render_device_info(config, wifi_ssid),
     )
@@ -676,8 +925,9 @@ fn render_chat_view(
     draft_prompt: Option<&str>,
     last_prompt: Option<&str>,
     answer: Option<&str>,
+    ai_form_state: &AiFormState,
 ) -> String {
-    let ai_form = render_ai_form(config, "console-ai", "Save", "update");
+    let ai_form = render_ai_form(config, "console-ai", "Save", "update", ai_form_state);
     let has_transcript = last_prompt.is_some() || answer.is_some();
     let transcript_html = render_transcript(last_prompt, answer);
     let model_options_html = render_model_switch_options(config);
@@ -785,7 +1035,9 @@ fn render_chat_view(
 }
 
 fn render_session_summary(last_prompt: Option<&str>, answer: Option<&str>) -> String {
-    let source = answer.or(last_prompt).unwrap_or("No recent conversation yet.");
+    let source = answer
+        .or(last_prompt)
+        .unwrap_or("No recent conversation yet.");
     let single_line = source.split_whitespace().collect::<Vec<_>>().join(" ");
     let trimmed = if single_line.chars().count() > 96 {
         let shortened: String = single_line.chars().take(93).collect();
@@ -801,19 +1053,17 @@ fn render_session_summary(last_prompt: Option<&str>, answer: Option<&str>) -> St
 }
 
 fn render_ai_form(
-    config: &ClawPiConfig,
+    _config: &ClawPiConfig,
     form_id: &str,
     submit_label: &str,
     form_mode: &str,
+    form_state: &AiFormState,
 ) -> String {
-    let initial_provider = config.ai_provider.as_deref().unwrap_or("");
-    let initial_model = config.ai_model.as_deref().unwrap_or("");
-    let initial_has_secret = config
-        .ai_api_key
-        .as_deref()
-        .map(|value| !value.trim().is_empty())
-        .unwrap_or(false);
-    let api_key_placeholder = if form_mode == "update" && initial_has_secret {
+    let initial_provider = form_state.provider.as_str();
+    let initial_model = form_state.model.as_str();
+    let initial_auth = form_state.auth_mode.as_str();
+    let initial_has_secret = form_state.has_saved_secret;
+    let api_key_placeholder = if form_mode == "update" && form_state.has_saved_secret {
         "Current key saved"
     } else {
         "sk-..."
@@ -822,7 +1072,7 @@ fn render_ai_form(
     let provider_options_html = render_provider_select_options(initial_provider);
 
     format!(
-        "<form method=\"post\" action=\"/configure-ai\" class=\"ai-config-form form-stack\" data-form-mode=\"{form_mode}\" data-initial-provider=\"{initial_provider}\" data-initial-model=\"{initial_model}\" data-initial-has-secret=\"{initial_has_secret}\">\
+        "<form method=\"post\" action=\"/configure-ai\" class=\"ai-config-form form-stack\" data-form-mode=\"{form_mode}\" data-initial-provider=\"{initial_provider}\" data-initial-model=\"{initial_model}\" data-initial-auth=\"{initial_auth}\" data-initial-has-secret=\"{initial_has_secret}\">\
            <input type=\"hidden\" name=\"auth_mode\" value=\"\">\
            <div class=\"field\">\
              <label for=\"{form_id}-provider\">Provider</label>\
@@ -847,6 +1097,7 @@ fn render_ai_form(
         form_mode = escape_html(form_mode),
         initial_provider = escape_html(initial_provider),
         initial_model = escape_html(initial_model),
+        initial_auth = escape_html(initial_auth),
         initial_has_secret = if initial_has_secret { "true" } else { "false" },
         form_id = escape_html(form_id),
         api_key_placeholder = escape_html(api_key_placeholder),
@@ -893,9 +1144,11 @@ fn current_model_switch_label(config: &ClawPiConfig) -> String {
         .iter()
         .find(|preset| preset.id.eq_ignore_ascii_case(current_provider))
         .and_then(|preset| {
-            preset.models.iter().find(|model| model.id == current_model).map(|model| {
-                format!("{} {}", display_provider_label(preset), model.label)
-            })
+            preset
+                .models
+                .iter()
+                .find(|model| model.id == current_model)
+                .map(|model| format!("{} {}", display_provider_label(preset), model.label))
         })
         .unwrap_or_else(|| String::from("Model unavailable"))
 }
@@ -923,6 +1176,151 @@ fn render_provider_select_options(selected: &str) -> String {
         ));
     }
     html
+}
+
+fn provider_preset(provider: &str) -> Option<&'static UiProviderPreset> {
+    PROVIDER_PRESETS
+        .iter()
+        .find(|preset| provider.eq_ignore_ascii_case(preset.id))
+}
+
+fn infer_auth_mode(config: &ClawPiConfig, provider: &str) -> String {
+    if provider.eq_ignore_ascii_case(OPENAI_CODEX_PROVIDER) {
+        return String::from(AUTH_MODE_DEVICE_LOGIN);
+    }
+    if provider.eq_ignore_ascii_case("ollama") {
+        return String::from(AUTH_MODE_LOCAL);
+    }
+    if config
+        .ai_api_key
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return String::from(AUTH_MODE_API_KEY);
+    }
+    provider_preset(provider)
+        .map(|preset| String::from(preset.default_auth))
+        .unwrap_or_else(|| String::from(AUTH_MODE_API_KEY))
+}
+
+fn default_ai_form_state(
+    config: &ClawPiConfig,
+    pending_openai_login: Option<&PendingOpenAiLogin>,
+) -> AiFormState {
+    if let Some(pending) = pending_openai_login {
+        return AiFormState {
+            provider: pending.provider.clone(),
+            model: pending.model.clone(),
+            auth_mode: String::from(AUTH_MODE_DEVICE_LOGIN),
+            has_saved_secret: false,
+        };
+    }
+
+    let provider = config.ai_provider.clone().unwrap_or_default();
+    let model = config.ai_model.clone().unwrap_or_default();
+    let has_saved_secret = config
+        .ai_api_key
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+
+    AiFormState {
+        auth_mode: infer_auth_mode(config, &provider),
+        provider,
+        model,
+        has_saved_secret,
+    }
+}
+
+fn submitted_ai_form_state(
+    config: &ClawPiConfig,
+    provider: &str,
+    model: &str,
+    auth_mode: &str,
+) -> AiFormState {
+    AiFormState {
+        provider: provider.trim().to_string(),
+        model: model.trim().to_string(),
+        auth_mode: auth_mode.trim().to_string(),
+        has_saved_secret: config
+            .ai_provider
+            .as_deref()
+            .is_some_and(|current| current.eq_ignore_ascii_case(provider))
+            && config
+                .ai_api_key
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+    }
+}
+
+fn ai_runtime_ready(
+    layout: &Layout,
+    config: &ClawPiConfig,
+    pending_openai_login: Option<&PendingOpenAiLogin>,
+) -> io::Result<bool> {
+    if pending_openai_login.is_some() || !ai_configured(config) {
+        return Ok(false);
+    }
+
+    match config.ai_provider.as_deref().unwrap_or_default() {
+        OPENAI_CODEX_PROVIDER => openai_codex_auth_profile_exists(layout),
+        "ollama" => Ok(true),
+        _ => Ok(config
+            .ai_api_key
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())),
+    }
+}
+
+fn render_pending_openai_login(pending_openai_login: Option<&PendingOpenAiLogin>) -> String {
+    let Some(pending_openai_login) = pending_openai_login else {
+        return String::new();
+    };
+
+    let fast_link_html = pending_openai_login
+        .verification_uri_complete
+        .as_ref()
+        .map(|url| {
+            format!(
+                "<a href=\"{url}\" target=\"_blank\" rel=\"noreferrer\">Open OpenAI login</a>",
+                url = escape_html(url),
+            )
+        })
+        .unwrap_or_else(|| {
+            format!(
+                "<a href=\"{url}\" target=\"_blank\" rel=\"noreferrer\">Open OpenAI login</a>",
+                url = escape_html(&pending_openai_login.verification_uri),
+            )
+        });
+    let expires_at = pending_openai_login
+        .expires_at_datetime()
+        .map(|value| value.format("%-I:%M %p").to_string())
+        .unwrap_or_else(|| String::from("soon"));
+    let message = pending_openai_login
+        .message
+        .as_deref()
+        .unwrap_or("Finish sign-in in your browser, then this page will continue automatically.");
+
+    format!(
+        "<div class=\"oauth-login\" id=\"openai-login-card\" data-oauth-provider=\"openai\" data-oauth-status-url=\"/oauth/openai/status\" data-oauth-interval-secs=\"{interval_secs}\">\
+           <div class=\"oauth-login-head\">OpenAI ChatGPT login in progress</div>\
+           <p class=\"oauth-login-copy\">{message}</p>\
+           <div class=\"oauth-login-code\">{user_code}</div>\
+           <div class=\"oauth-login-actions\">\
+             {fast_link_html}\
+             <button type=\"button\" class=\"oauth-refresh\" id=\"openai-login-refresh\">Check status</button>\
+           </div>\
+           <div class=\"oauth-login-meta\">Code expires around {expires_at}.</div>\
+           <div class=\"oauth-login-status is-hidden\" id=\"openai-login-status\"></div>\
+           <form method=\"post\" action=\"/oauth/openai/cancel\" class=\"oauth-login-cancel\">\
+             <button type=\"submit\" class=\"oauth-cancel\">Cancel login</button>\
+           </form>\
+         </div>",
+        interval_secs = pending_openai_login.interval_secs,
+        message = escape_html(message),
+        user_code = escape_html(&pending_openai_login.user_code),
+        fast_link_html = fast_link_html,
+        expires_at = escape_html(&expires_at),
+    )
 }
 
 fn resolve_provider(fields: &HashMap<String, String>) -> String {
@@ -1032,6 +1430,25 @@ fn resolve_ai_secret(
         )
 }
 
+fn ensure_supported_auth_mode(provider: &str, auth_mode: &str) -> io::Result<()> {
+    let Some(preset) = provider_preset(provider) else {
+        return Ok(());
+    };
+
+    if preset
+        .auth_options
+        .iter()
+        .any(|option| option.id == auth_mode)
+    {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "That sign-in method is not supported for the selected provider.",
+        ))
+    }
+}
+
 fn render_provider_catalog_json() -> String {
     serde_json::to_string(PROVIDER_PRESETS)
         .unwrap_or_else(|_| String::from("[]"))
@@ -1068,6 +1485,18 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     button:hover {{ background: #e4e4e7; }}\
     .form-stack {{ display: grid; gap: 0.8rem; padding: 1rem; }}\
     .is-hidden {{ display: none !important; }}\
+    .oauth-login {{ display: grid; gap: 0.75rem; margin: 0 1rem; padding: 1rem; border: 1px solid #27272a; background: #111114; }}\
+    .oauth-login-head {{ color: #fafafa; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }}\
+    .oauth-login-copy {{ color: #a1a1aa; font-size: 13px; line-height: 1.5; }}\
+    .oauth-login-code {{ display: inline-flex; width: fit-content; padding: 0.5rem 0.7rem; border: 1px solid #3f3f46; background: #09090b; color: #fafafa; font-size: 15px; letter-spacing: 0.12em; }}\
+    .oauth-login-actions {{ display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }}\
+    .oauth-login-actions a {{ color: #fafafa; text-decoration: underline; text-underline-offset: 0.18em; }}\
+    .oauth-login-actions button {{ background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-weight: 500; }}\
+    .oauth-login-actions button:hover {{ color: #fafafa; background: #111114; }}\
+    .oauth-login-meta {{ color: #71717a; font-size: 12px; }}\
+    .oauth-login-status {{ color: #f87171; font-size: 13px; }}\
+    .oauth-login-cancel button {{ background: transparent; color: #71717a; border: none; padding: 0; font-weight: 400; }}\
+    .oauth-login-cancel button:hover {{ background: transparent; color: #fafafa; }}\
     .console-shell {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
     .console-body {{ display: flex; flex: 1; min-height: 0; }}\
     .shell-header {{ height: 2.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0; border-bottom: 1px solid #18181b; color: #71717a; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-size: 0.84rem; }}\
@@ -1165,6 +1594,7 @@ fn render_ui_script() -> String {
     var formMode = form.dataset.formMode || "setup";
     var initialProvider = form.dataset.initialProvider || "";
     var initialModel = form.dataset.initialModel || "";
+    var initialAuth = form.dataset.initialAuth || "";
     var initialHasSecret = form.dataset.initialHasSecret === "true";
 
     var providerSelect = form.querySelector("[data-provider-select]");
@@ -1201,7 +1631,13 @@ fn render_ui_script() -> String {
         authSelect.appendChild(o);
       });
       var defaultAuth = preset.default_auth;
-      if (initialHasSecret && preset.auth_options.some(function (o) { return o.id === "api_key"; })) {
+      if (
+        initialProvider === preset.id &&
+        initialAuth &&
+        preset.auth_options.some(function (o) { return o.id === initialAuth; })
+      ) {
+        defaultAuth = initialAuth;
+      } else if (initialHasSecret && preset.auth_options.some(function (o) { return o.id === "api_key"; })) {
         defaultAuth = "api_key";
       }
       authSelect.value = defaultAuth;
@@ -1460,6 +1896,62 @@ fn render_ui_script() -> String {
   var output = document.getElementById("output");
   if (output) {
     output.scrollTop = output.scrollHeight;
+  }
+
+  function setOpenAiLoginError(message) {
+    var node = document.getElementById("openai-login-status");
+    if (!node) return;
+    node.textContent = message || "";
+    node.classList.toggle("is-hidden", !message);
+  }
+
+  function pollOpenAiLogin() {
+    var card = document.getElementById("openai-login-card");
+    if (!card) return;
+    var statusUrl = card.dataset.oauthStatusUrl;
+    if (!statusUrl) return;
+
+    fetch(statusUrl, { cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (payload) {
+        if (!payload || !payload.status) return;
+        if (payload.status === "complete" || payload.status === "missing") {
+          window.location.reload();
+          return;
+        }
+        if (payload.status === "error") {
+          setOpenAiLoginError(payload.error || "OpenAI login failed.");
+          return;
+        }
+        if (payload.status === "pending" && payload.interval_secs) {
+          window.clearTimeout(window.__clawpiOpenAiLoginTimer);
+          window.__clawpiOpenAiLoginTimer = window.setTimeout(
+            pollOpenAiLogin,
+            Math.max(payload.interval_secs, 2) * 1000
+          );
+        }
+      })
+      .catch(function () {
+        setOpenAiLoginError("Could not check OpenAI login status.");
+      });
+  }
+
+  var openAiLoginCard = document.getElementById("openai-login-card");
+  if (openAiLoginCard) {
+    var refreshButton = document.getElementById("openai-login-refresh");
+    if (refreshButton) {
+      refreshButton.addEventListener("click", function () {
+        setOpenAiLoginError("");
+        pollOpenAiLogin();
+      });
+    }
+    var initialIntervalSecs = parseInt(openAiLoginCard.dataset.oauthIntervalSecs || "5", 10);
+    window.__clawpiOpenAiLoginTimer = window.setTimeout(
+      pollOpenAiLogin,
+      Math.max(isNaN(initialIntervalSecs) ? 5 : initialIntervalSecs, 2) * 1000
+    );
   }
 
   formatSessionDate();
@@ -1732,13 +2224,16 @@ impl Request {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::PendingOpenAiLogin;
     use clawpi_core::{SetupState, CONFIG_VERSION, DEFAULT_WIFI_COUNTRY, RUNTIME_PROFILE};
+    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn render_home_page_shows_setup_shell_before_ai_configuration() {
         let layout = test_layout("setup");
-        let html = render_home_page(&layout, &base_config(), None, None, None, None, None).unwrap();
+        let html =
+            render_home_page(&layout, &base_config(), None, None, None, None, None, None).unwrap();
 
         assert!(html.contains("Set up your AI provider to get started."));
         assert!(html.contains("name=\"provider_value\""));
@@ -1755,7 +2250,7 @@ mod tests {
         config.ai_model = Some(String::from("anthropic/claude-sonnet-4.6"));
         config.ai_api_key = Some(String::from("sk-test-secret"));
 
-        let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
+        let html = render_home_page(&layout, &config, None, None, None, None, None, None).unwrap();
 
         assert!(html.contains("placeholder=\"Ask me anything\""));
         assert!(html.contains("id=\"model-switcher\""));
@@ -1770,7 +2265,7 @@ mod tests {
         config.ai_provider = Some(String::from("ollama"));
         config.ai_model = Some(String::from("llama4:maverick"));
 
-        let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
+        let html = render_home_page(&layout, &config, None, None, None, None, None, None).unwrap();
 
         assert!(html.contains("data-initial-provider=\"ollama\""));
         assert!(html.contains("Local"));
@@ -1778,15 +2273,60 @@ mod tests {
     }
 
     #[test]
+    fn render_home_page_requires_openai_chatgpt_login_before_console() {
+        let layout = test_layout("openai-login-required");
+        let mut config = base_config();
+        config.ai_provider = Some(String::from("openai-codex"));
+        config.ai_model = Some(String::from("gpt-5-codex"));
+
+        let html = render_home_page(&layout, &config, None, None, None, None, None, None).unwrap();
+
+        assert!(html.contains("Set up your AI provider to get started."));
+        assert!(!html.contains("placeholder=\"Ask me anything\""));
+    }
+
+    #[test]
+    fn render_home_page_shows_pending_openai_login_card() {
+        let layout = test_layout("openai-pending");
+        let pending = PendingOpenAiLogin {
+            provider: String::from("openai-codex"),
+            model: String::from("gpt-5-codex"),
+            profile_name: String::from("default"),
+            user_code: String::from("ABCD-EFGH"),
+            verification_uri: String::from("https://auth.openai.com/activate"),
+            verification_uri_complete: Some(String::from(
+                "https://auth.openai.com/activate?user_code=ABCD-EFGH",
+            )),
+            device_code: String::from("device-code"),
+            interval_secs: 5,
+            expires_at: "2026-04-04T12:00:00Z".to_string(),
+            message: Some(String::from("Finish sign-in in your browser.")),
+        };
+        let pending_path = layout
+            .state_dir()
+            .join("zeroclaw")
+            .join("clawpi-openai-device-login.json");
+        fs::create_dir_all(pending_path.parent().unwrap()).unwrap();
+        fs::write(pending_path, serde_json::to_vec_pretty(&pending).unwrap()).unwrap();
+
+        let html =
+            render_home_page(&layout, &base_config(), None, None, None, None, None, None).unwrap();
+
+        assert!(html.contains("OpenAI ChatGPT login in progress"));
+        assert!(html.contains("ABCD-EFGH"));
+        assert!(html.contains("/oauth/openai/status"));
+    }
+
+    #[test]
     fn render_model_switch_options_show_configured_model_label() {
         let mut config = base_config();
         config.ai_provider = Some(String::from("openai"));
-        config.ai_model = Some(String::from("gpt-5.4"));
+        config.ai_model = Some(String::from("gpt-5.2"));
 
         let html = render_model_switch_options(&config);
 
-        assert!(html.contains("OpenAI GPT-5.4"));
-        assert!(!html.contains("OpenAI GPT-5.3 Codex"));
+        assert!(html.contains("OpenAI GPT-5.2"));
+        assert!(!html.contains("OpenAI GPT-5 Codex"));
         assert!(!html.contains("Anthropic Claude Sonnet 4.6"));
         assert!(!html.contains("Ollama Llama 4 Maverick"));
     }
@@ -1795,11 +2335,11 @@ mod tests {
     fn render_model_switch_options_only_shows_active_configuration() {
         let mut config = base_config();
         config.ai_provider = Some(String::from("openai-codex"));
-        config.ai_model = Some(String::from("gpt-5.3-codex"));
+        config.ai_model = Some(String::from("gpt-5-codex"));
 
         let html = render_model_switch_options(&config);
 
-        assert!(html.contains("OpenAI GPT-5.3 Codex"));
+        assert!(html.contains("OpenAI GPT-5 Codex"));
         assert!(!html.contains("Anthropic Claude Sonnet 4.6"));
         assert!(!html.contains("Ollama Llama 4 Maverick"));
     }
@@ -1817,11 +2357,35 @@ mod tests {
         config.ai_provider = Some(String::from("openrouter"));
         config.ai_model = Some(String::from("openai/gpt-5.4"));
 
-        let html = render_ai_form(&config, "custom-ai", "Save", "update");
+        let html = render_ai_form(
+            &config,
+            "custom-ai",
+            "Save",
+            "update",
+            &default_ai_form_state(&config, None),
+        );
 
         assert!(html.contains("data-initial-provider=\"openrouter\""));
         assert!(html.contains("data-initial-model=\"openai/gpt-5.4\""));
+        assert!(html.contains("data-initial-auth=\"api_key\""));
         assert!(html.contains("name=\"provider_value\""));
+    }
+
+    #[test]
+    fn render_ai_form_preserves_openai_chatgpt_auth_mode() {
+        let mut config = base_config();
+        config.ai_provider = Some(String::from("openai-codex"));
+        config.ai_model = Some(String::from("gpt-5-codex"));
+
+        let html = render_ai_form(
+            &config,
+            "chatgpt-ai",
+            "Save",
+            "update",
+            &default_ai_form_state(&config, None),
+        );
+
+        assert!(html.contains("data-initial-auth=\"device_login\""));
     }
 
     #[test]

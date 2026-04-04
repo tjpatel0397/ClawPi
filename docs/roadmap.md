@@ -169,6 +169,8 @@ Current status:
 - that console now talks to a first local `clawpi-agentd` proving-ground daemon instead of running prompt handling inside `clawpi-webd`
 - that daemon now wraps upstream ZeroClaw so prompts, tool use, and shell execution come from the reused runtime core
 - the current AI setup path is now ZeroClaw-backed and provider-configurable from the device itself
+- the proving-ground browser shell is now much calmer than the earlier busy rewrite: dark neutral palette, bottom-anchored empty-state composer, tucked-away settings, and a lightweight date/weather/session summary in the idle state
+- the current footer model label now intentionally shows only the single active configured AI route; true multi-provider enablement is still blocked on the config contract
 - the runtime direction is to reuse or fork ZeroClaw/OpenClaw or a similar Rust-based agent core and integrate it deeply into normal mode
 - ClawPi may still drift parts of the default ZeroClaw UX so the device feels simpler and more native
 - the first real arm64 `pi-gen` build on the CM5 now completes and produces a flashable artifact
@@ -216,24 +218,28 @@ The important thing is not to build these too early.
 
 The important thing is to keep building in the right order.
 
-## Handoff note (2026-04-03)
+## Handoff note (2026-04-04)
 
-The current next step is not adding more browser features.
+The current next step is no longer a broad visual rewrite.
 
-The current next step is fixing and simplifying `clawpi.local`.
+The shell now has a much better visual baseline.
+The next thread should move into the missing runtime behavior and config work.
 
-Right now the proving-ground browser flow has the right broad direction:
+Right now the proving-ground browser flow has:
 
 - provider-first AI setup
 - provider-specific auth handling
-- a simple prompt surface after setup
+- a calmer prompt surface after setup
 - a local `clawpi-agentd` boundary that wraps upstream ZeroClaw
+- an idle shell that exposes date, approximate weather, and a recent-session summary
 
-But the latest UI rewrite is still too visually busy and still buggy.
+But the proving-ground browser/runtime contract is still constrained by a
+single configured AI profile and still lacks the real action-taking flows the
+product wants.
 
-If a new thread continues from here, it should first:
+If a new thread continues from here, it should focus first on:
 
-- simplify the setup UI further
-- fix the provider/auth/model picker logic in `crates/clawpi-webd/src/main.rs`
-- make the setup-to-console transition feel obvious and low-cognitive-load
-- hold off on broader browser-side expansion until that surface is solid
+- expanding the config/runtime contract beyond one `ai_provider` + `ai_model`
+- wiring real device actions like Wi-Fi changes and slash-command system tasks through the local agent boundary
+- fixing any remaining auth/runtime edge cases now that the UI shell is mostly settled
+- avoiding a broad UI expansion until the underlying behavior matches the shell
