@@ -710,12 +710,34 @@ fn render_chat_view(
     answer: Option<&str>,
 ) -> String {
     let ai_form = render_ai_form(config, "console-ai", "Save", "update");
+    let has_transcript = last_prompt.is_some() || answer.is_some();
     let transcript_html = render_transcript(last_prompt, answer);
     let provider_label = current_provider_label(config);
     let model_options_html = render_current_model_options(config);
+    let terminal_class = if has_transcript {
+        "terminal"
+    } else {
+        "terminal terminal-idle"
+    };
+    let session_meta_html = if has_transcript {
+        String::new()
+    } else {
+        format!(
+            "<div class=\"session-intro\">\
+               <div class=\"session-kicker\">New session</div>\
+               <div class=\"session-meta\">{device_name}.local</div>\
+               <div class=\"session-meta\">{wifi_ssid}</div>\
+               <div class=\"session-meta\">{provider_label} · {model_label}</div>\
+             </div>",
+            device_name = escape_html(&config.device_name),
+            wifi_ssid = escape_html(wifi_ssid),
+            provider_label = escape_html(provider_label),
+            model_label = escape_html(config.ai_model.as_deref().unwrap_or("No model")),
+        )
+    };
 
     format!(
-        "<div class=\"terminal\">\
+        "<div class=\"{terminal_class}\">\
            <div class=\"messages\" id=\"output\">\
              <div class=\"messages-inner\">\
                {notice_html}\
@@ -725,6 +747,7 @@ fn render_chat_view(
            </div>\
            <div class=\"editor\">\
              <div class=\"editor-inner\">\
+               {session_meta_html}\
                <form method=\"post\" action=\"/prompt\" class=\"editor-input\" id=\"prompt-form\">\
                  <span class=\"prompt-char\">&gt;</span>\
                  <textarea id=\"prompt\" name=\"prompt\" rows=\"1\" placeholder=\"Message Claw...\" autofocus>{draft_prompt}</textarea>\
@@ -751,9 +774,11 @@ fn render_chat_view(
              {ai_form}\
            </div>\
          </div>",
+        terminal_class = terminal_class,
         notice_html = notice_html,
         error_html = error_html,
         transcript_html = transcript_html,
+        session_meta_html = session_meta_html,
         draft_prompt = escape_html(draft_prompt.unwrap_or("")),
         provider_label = escape_html(provider_label),
         device_name = escape_html(&config.device_name),
@@ -830,9 +855,7 @@ fn render_transcript(last_prompt: Option<&str>, answer: Option<&str>) -> String 
             "<div class=\"msg msg-user\"><span class=\"msg-prefix\">you&gt;</span> {prompt}</div>",
             prompt = escape_html(prompt),
         ),
-        (None, _) => String::from(
-            "<div class=\"msg msg-empty\">No messages yet.</div>",
-        ),
+        (None, _) => String::from("<div class=\"msg msg-empty\"></div>"),
     }
 }
 
@@ -1040,6 +1063,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .form-stack {{ display: grid; gap: 0.8rem; padding: 1rem; }}\
     .is-hidden {{ display: none !important; }}\
     .terminal {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
+    .terminal-idle {{ justify-content: flex-start; }}\
     .messages {{ flex: 1; overflow-y: auto; padding: 1.25rem 1rem 0; }}\
     .messages-inner {{ width: min(100%, 64rem); margin: 0 auto; padding-bottom: 2rem; }}\
     .messages::-webkit-scrollbar {{ width: 4px; }}\
@@ -1050,15 +1074,22 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .msg-user .msg-prefix {{ color: #58a6ff; }}\
     .msg-claw {{ color: #c9d1d9; }}\
     .msg-claw .msg-prefix {{ color: #d2a8ff; }}\
-    .msg-empty {{ color: #6e7681; padding: 20vh 0 0; text-align: center; }}\
+    .msg-empty {{ min-height: 0; padding: 0; }}\
     .msg-system {{ color: #8b949e; font-size: 13px; }}\
     .editor {{ border-top: 1px solid #21262d; background: #0d1117; flex-shrink: 0; }}\
     .editor-inner {{ width: min(100%, 64rem); margin: 0 auto; }}\
+    .terminal-idle .messages {{ flex: 0 0 clamp(10rem, 28vh, 18rem); overflow: hidden; }}\
+    .terminal-idle .messages-inner {{ padding-bottom: 0; }}\
+    .terminal-idle .editor {{ border-top: none; }}\
+    .terminal-idle .editor-inner {{ max-width: 46rem; padding: 0 1rem 2rem; }}\
     .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; }}\
     .prompt-char {{ color: #3fb950; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
     .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #c9d1d9; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; }}\
     .editor-input textarea:focus {{ outline: none; }}\
     .editor-input textarea::placeholder {{ color: #484f58; }}\
+    .session-intro {{ display: grid; gap: 0.55rem; padding: 0 1rem 1.2rem; }}\
+    .session-kicker {{ color: #8b949e; font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 600; letter-spacing: -0.03em; }}\
+    .session-meta {{ color: #6e7681; font-size: 0.95rem; }}\
     .editor-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 1rem 0.9rem; }}\
     .model-picker {{ display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }}\
     .footer-label {{ color: #6e7681; font-size: 12px; text-transform: lowercase; }}\
@@ -1068,6 +1099,8 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .footer-link {{ background: transparent; color: #6e7681; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; }}\
     .footer-link:hover {{ background: transparent; color: #c9d1d9; }}\
     .footer-meta {{ color: #484f58; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
+    .terminal-idle .editor-input {{ border: 1px solid #2b3137; border-radius: 14px 14px 0 0; background: #161b22; padding-top: 1rem; }}\
+    .terminal-idle .editor-footer {{ border: 1px solid #2b3137; border-top: none; border-radius: 0 0 14px 14px; background: #161b22; padding-bottom: 0.95rem; }}\
     .settings-panel {{ position: fixed; inset: 0; background: #0d1117; z-index: 20; overflow-y: auto; }}\
     .settings-shell {{ width: min(100%, 42rem); margin: 0 auto; }}\
     .settings-head {{ display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #21262d; }}\
@@ -1077,6 +1110,9 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .settings-copy {{ color: #6e7681; font-size: 13px; padding: 0.85rem 1rem 0; }}\
     .device-info {{ color: #484f58; font-size: 12px; padding: 1rem; }}\
     @media (max-width: 640px) {{\
+      .terminal-idle .messages {{ flex-basis: 22vh; }}\
+      .terminal-idle .editor-inner {{ padding-bottom: 1.25rem; }}\
+      .session-kicker {{ font-size: 1.9rem; }}\
       .editor-footer {{ flex-direction: column; align-items: flex-start; }}\
       .footer-actions {{ width: 100%; justify-content: space-between; }}\
       .footer-meta {{ white-space: normal; }}\
