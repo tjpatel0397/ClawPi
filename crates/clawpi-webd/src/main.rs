@@ -769,7 +769,6 @@ fn render_chat_view(
          <div class=\"settings-panel is-hidden\" id=\"settings-panel\">\
            <div class=\"settings-shell\">\
              <div class=\"settings-head\"><span>Settings</span><button type=\"button\" id=\"close-settings\">esc</button></div>\
-             <div class=\"settings-copy\">Provider and auth live here. Chat stays in the console.</div>\
              {ai_form}\
            </div>\
          </div>",
@@ -1083,7 +1082,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .shell-status {{ display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }}\
     .shell-dot {{ width: 0.35rem; height: 0.35rem; border-radius: 999px; background: #4ade80; flex-shrink: 0; }}\
     .terminal {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
-    .terminal-idle {{ justify-content: flex-start; }}\
+    .terminal-idle {{ justify-content: flex-end; }}\
     .messages {{ flex: 1; overflow-y: auto; padding: 1.25rem 1rem 0; }}\
     .messages-inner {{ width: min(100%, 64rem); margin: 0 auto; padding-bottom: 2rem; }}\
     .messages::-webkit-scrollbar {{ width: 4px; }}\
@@ -1098,10 +1097,10 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .msg-system {{ color: #a1a1aa; font-size: 13px; }}\
     .editor {{ border-top: 1px solid #18181b; background: #09090b; flex-shrink: 0; }}\
     .editor-inner {{ width: min(100%, 64rem); margin: 0 auto; }}\
-    .terminal-idle .messages {{ flex: 0 0 clamp(17rem, 42vh, 29rem); overflow: hidden; }}\
+    .terminal-idle .messages {{ flex: 1 1 auto; overflow: hidden; }}\
     .terminal-idle .messages-inner {{ padding-bottom: 0; }}\
     .terminal-idle .editor {{ border-top: none; }}\
-    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 2rem; }}\
+    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 10px; }}\
     .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
     .prompt-char {{ color: #4ade80; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
     .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; font-family: inherit; letter-spacing: 0; }}\
@@ -1126,12 +1125,10 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .settings-head span {{ color: #a1a1aa; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }}\
     .settings-head button {{ background: transparent; color: #71717a; border: 1px solid #27272a; font-size: 12px; padding: 0.2rem 0.5rem; }}\
     .settings-head button:hover {{ color: #fafafa; background: transparent; }}\
-    .settings-copy {{ color: #71717a; font-size: 13px; padding: 0.85rem 1rem 0; }}\
     .device-info {{ color: #71717a; font-size: 12px; padding: 1rem; }}\
     @media (max-width: 640px) {{\
       .shell-header-right {{ display: none; }}\
-      .terminal-idle .messages {{ flex-basis: 34vh; }}\
-      .terminal-idle .editor-inner {{ width: auto; margin-left: 1rem; margin-right: 1rem; padding-bottom: 1.25rem; }}\
+      .terminal-idle .editor-inner {{ width: auto; margin-left: 1rem; margin-right: 1rem; padding-bottom: 10px; }}\
       .editor-footer {{ flex-direction: column; align-items: flex-start; }}\
       .footer-actions {{ width: 100%; justify-content: flex-end; }}\
     }}\
