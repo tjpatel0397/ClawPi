@@ -1100,7 +1100,7 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     .terminal-idle .messages {{ flex: 1 1 auto; overflow: hidden; }}\
     .terminal-idle .messages-inner {{ padding-bottom: 0; }}\
     .terminal-idle .editor {{ border-top: none; }}\
-    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 100px; }}\
+    .terminal-idle .editor-inner {{ width: min(100%, 46rem); margin: 0 auto; padding: 0 1rem 50px; }}\
     .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}\
     .prompt-char {{ color: #4ade80; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
     .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #fafafa; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; font-size: 1.02rem; font-family: inherit; letter-spacing: 0; }}\
