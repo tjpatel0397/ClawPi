@@ -509,6 +509,46 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                 }
             }
         }
+        ("POST", "/switch-model") => {
+            let fields = parse_form_urlencoded(&String::from_utf8_lossy(&request.body));
+            if let Some(model) = fields
+                .get("model")
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+            {
+                let provider = config.ai_provider.as_deref().unwrap_or(DEFAULT_AI_PROVIDER);
+                if let Err(err) =
+                    set_ai_profile(layout, provider, Some(model), config.ai_api_key.as_deref())
+                {
+                    write_http_response(
+                        stream,
+                        "422 Unprocessable Entity",
+                        "text/html; charset=utf-8",
+                        render_home_page(
+                            layout,
+                            config,
+                            None,
+                            Some(&format!("failed to switch model: {err}")),
+                            None,
+                            None,
+                            None,
+                        )?,
+                    )?;
+                    return Ok(());
+                }
+            }
+            let updated_state = inspect_state(layout)?;
+            let updated_config = updated_state.config_status.as_config().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "expected valid config after model switch")
+            })?;
+            write_runtime_status(layout, updated_config)?;
+            write_http_response(
+                stream,
+                "200 OK",
+                "text/html; charset=utf-8",
+                render_home_page(layout, updated_config, None, None, None, None, None)?,
+            )?;
+        }
         ("POST", "/prompt") => {
             let fields = parse_form_urlencoded(&String::from_utf8_lossy(&request.body));
             let prompt = fields.get("prompt").map(|value| value.trim()).unwrap_or("");
@@ -671,43 +711,55 @@ fn render_chat_view(
 ) -> String {
     let ai_form = render_ai_form(config, "console-ai", "Save", "update");
     let transcript_html = render_transcript(last_prompt, answer);
-    let model_label = config.ai_model.as_deref().unwrap_or("unknown");
-    let provider_label = config.ai_provider.as_deref().unwrap_or("unknown");
+    let provider_label = current_provider_label(config);
+    let model_options_html = render_current_model_options(config);
 
     format!(
         "<div class=\"terminal\">\
-           <div class=\"terminal-output\" id=\"output\">\
-             {notice_html}\
-             {error_html}\
-             {transcript_html}\
+           <div class=\"messages\" id=\"output\">\
+             <div class=\"messages-inner\">\
+               {notice_html}\
+               {error_html}\
+               {transcript_html}\
+             </div>\
            </div>\
-           <div class=\"terminal-input\">\
-             <form method=\"post\" action=\"/prompt\" class=\"input-line\" id=\"prompt-form\">\
-               <span class=\"input-prefix\">&gt;</span>\
-               <textarea id=\"prompt\" name=\"prompt\" rows=\"1\" placeholder=\"Message Claw... (type /help for commands)\" autofocus>{draft_prompt}</textarea>\
-             </form>\
-           </div>\
-           <div class=\"statusbar\">\
-             <span>{provider_label}/{model_label}</span>\
-             <span>{device_name} · {wifi_ssid}</span>\
+           <div class=\"editor\">\
+             <div class=\"editor-inner\">\
+               <form method=\"post\" action=\"/prompt\" class=\"editor-input\" id=\"prompt-form\">\
+                 <span class=\"prompt-char\">&gt;</span>\
+                 <textarea id=\"prompt\" name=\"prompt\" rows=\"1\" placeholder=\"Message Claw...\" autofocus>{draft_prompt}</textarea>\
+               </form>\
+               <div class=\"editor-footer\">\
+                 <form method=\"post\" action=\"/switch-model\" class=\"model-picker\" id=\"model-switch-form\">\
+                   <span class=\"footer-label\">{provider_label}</span>\
+                   <select id=\"model-switcher\" class=\"model-select\" name=\"model\">\
+                     {model_options_html}\
+                   </select>\
+                 </form>\
+                 <div class=\"footer-actions\">\
+                   <button type=\"button\" class=\"footer-link\" id=\"open-settings\">settings</button>\
+                   <span class=\"footer-meta\">{device_name} · {wifi_ssid}</span>\
+                 </div>\
+               </div>\
+             </div>\
            </div>\
          </div>\
          <div class=\"settings-panel is-hidden\" id=\"settings-panel\">\
-           <div class=\"settings-header\">\
-             <span>Settings</span>\
-             <button type=\"button\" onclick=\"document.getElementById('settings-panel').classList.add('is-hidden')\">Close</button>\
+           <div class=\"settings-shell\">\
+             <div class=\"settings-head\"><span>Settings</span><button type=\"button\" id=\"close-settings\">esc</button></div>\
+             <div class=\"settings-copy\">Provider and auth live here. Chat stays in the console.</div>\
+             {ai_form}\
            </div>\
-           {ai_form}\
          </div>",
         notice_html = notice_html,
         error_html = error_html,
         transcript_html = transcript_html,
         draft_prompt = escape_html(draft_prompt.unwrap_or("")),
         provider_label = escape_html(provider_label),
-        model_label = escape_html(model_label),
         device_name = escape_html(&config.device_name),
         wifi_ssid = escape_html(wifi_ssid),
         ai_form = ai_form,
+        model_options_html = model_options_html,
     )
 }
 
@@ -790,6 +842,40 @@ fn render_device_info(config: &ClawPiConfig, wifi_ssid: &str) -> String {
         device_name = escape_html(&config.device_name),
         wifi_ssid = escape_html(wifi_ssid),
     )
+}
+
+fn current_provider_label(config: &ClawPiConfig) -> &'static str {
+    let current_provider = config.ai_provider.as_deref().unwrap_or("");
+    PROVIDER_PRESETS
+        .iter()
+        .find(|preset| preset.id.eq_ignore_ascii_case(current_provider))
+        .map(|preset| preset.label)
+        .unwrap_or("Model")
+}
+
+fn render_current_model_options(config: &ClawPiConfig) -> String {
+    let current_provider = config.ai_provider.as_deref().unwrap_or("");
+    let current_model = config.ai_model.as_deref().unwrap_or("");
+    let mut html = String::new();
+    if let Some(preset) = PROVIDER_PRESETS
+        .iter()
+        .find(|preset| preset.id.eq_ignore_ascii_case(current_provider))
+    {
+        for model in preset.models {
+            let sel = if model.id == current_model {
+                " selected"
+            } else {
+                ""
+            };
+            html.push_str(&format!(
+                "<option value=\"{value}\"{sel}>{label}</option>",
+                value = escape_html(model.id),
+                sel = sel,
+                label = escape_html(model.label),
+            ));
+        }
+    }
+    html
 }
 
 fn render_provider_select_options(selected: &str) -> String {
@@ -939,41 +1025,62 @@ fn render_document(device_name: &str, body_html: &str) -> String {
     body {{ height: 100vh; background: #0d1117; color: #c9d1d9; font-family: \"SF Mono\", \"Fira Code\", \"Cascadia Code\", ui-monospace, monospace; font-size: 14px; line-height: 1.5; overflow: hidden; }}\
     main {{ height: 100vh; display: flex; flex-direction: column; }}\
     .hint {{ color: #8b949e; font-size: 13px; padding: 1.5rem 1rem 0; }}\
-    .notice {{ padding: 0.5rem 0.8rem; margin: 0.5rem 1rem 0; font-size: 13px; }}\
-    .notice-ok {{ color: #3fb950; background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.2); }}\
-    .notice-error {{ color: #f85149; background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.2); }}\
+    .notice {{ padding: 0.4rem 0.8rem; font-size: 13px; }}\
+    .notice-ok {{ color: #3fb950; }}\
+    .notice-error {{ color: #f85149; }}\
     label {{ display: block; color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}\
     .field {{ display: grid; gap: 0.3rem; }}\
-    input, select, textarea {{ width: 100%; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; padding: 0.5rem 0.6rem; font: inherit; font-size: 14px; }}\
-    input:focus, select:focus, textarea:focus {{ outline: none; border-color: #3fb950; }}\
+    input, select {{ width: 100%; background: #161b22; color: #c9d1d9; border: 1px solid #30363d; padding: 0.5rem 0.6rem; font: inherit; font-size: 14px; }}\
+    input:focus, select:focus {{ outline: none; border-color: #3fb950; }}\
     select {{ cursor: pointer; -webkit-appearance: none; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.6rem center; padding-right: 1.8rem; }}\
     select option {{ background: #161b22; color: #c9d1d9; }}\
+    select optgroup {{ color: #8b949e; font-style: normal; }}\
     button {{ padding: 0.5rem 0.8rem; background: #3fb950; color: #0d1117; border: none; font: inherit; font-weight: 600; cursor: pointer; }}\
     button:hover {{ background: #2ea043; }}\
     .form-stack {{ display: grid; gap: 0.8rem; padding: 1rem; }}\
     .is-hidden {{ display: none !important; }}\
     .terminal {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}\
-    .terminal-output {{ flex: 1; overflow-y: auto; padding: 1rem; }}\
-    .terminal-output::-webkit-scrollbar {{ width: 6px; }}\
-    .terminal-output::-webkit-scrollbar-track {{ background: transparent; }}\
-    .terminal-output::-webkit-scrollbar-thumb {{ background: #30363d; border-radius: 3px; }}\
+    .messages {{ flex: 1; overflow-y: auto; padding: 1.25rem 1rem 0; }}\
+    .messages-inner {{ width: min(100%, 64rem); margin: 0 auto; padding-bottom: 2rem; }}\
+    .messages::-webkit-scrollbar {{ width: 4px; }}\
+    .messages::-webkit-scrollbar-track {{ background: transparent; }}\
+    .messages::-webkit-scrollbar-thumb {{ background: #30363d; }}\
     .msg {{ padding: 0.3rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }}\
-    .msg-user .msg-prefix {{ color: #3fb950; font-weight: 600; }}\
-    .msg-claw .msg-prefix {{ color: #d2a8ff; font-weight: 600; }}\
-    .msg-empty {{ color: #484f58; font-style: italic; }}\
-    .msg-system {{ color: #8b949e; font-size: 13px; padding: 0.2rem 0; }}\
-    .terminal-input {{ border-top: 1px solid #21262d; padding: 0.6rem 1rem; background: #0d1117; }}\
-    .input-line {{ display: flex; align-items: flex-start; gap: 0.5rem; }}\
-    .input-prefix {{ color: #3fb950; font-weight: 600; padding-top: 0.15rem; flex-shrink: 0; }}\
-    .input-line textarea {{ border: none; background: transparent; color: #c9d1d9; padding: 0; resize: none; min-height: 1.5em; overflow: hidden; }}\
-    .input-line textarea:focus {{ outline: none; border-color: transparent; }}\
-    .statusbar {{ display: flex; justify-content: space-between; padding: 0.25rem 1rem; background: #161b22; border-top: 1px solid #21262d; color: #484f58; font-size: 12px; }}\
+    .msg-user {{ color: #c9d1d9; }}\
+    .msg-user .msg-prefix {{ color: #58a6ff; }}\
+    .msg-claw {{ color: #c9d1d9; }}\
+    .msg-claw .msg-prefix {{ color: #d2a8ff; }}\
+    .msg-empty {{ color: #6e7681; padding: 20vh 0 0; text-align: center; }}\
+    .msg-system {{ color: #8b949e; font-size: 13px; }}\
+    .editor {{ border-top: 1px solid #21262d; background: #0d1117; flex-shrink: 0; }}\
+    .editor-inner {{ width: min(100%, 64rem); margin: 0 auto; }}\
+    .editor-input {{ display: flex; align-items: flex-start; gap: 0; padding: 0.8rem 1rem 0.35rem; }}\
+    .prompt-char {{ color: #3fb950; padding: 0.1rem 0.5rem 0 0; flex-shrink: 0; user-select: none; }}\
+    .editor-input textarea {{ flex: 1; border: none; background: transparent; color: #c9d1d9; padding: 0; font: inherit; resize: none; min-height: 1.4em; max-height: 10em; overflow-y: auto; }}\
+    .editor-input textarea:focus {{ outline: none; }}\
+    .editor-input textarea::placeholder {{ color: #484f58; }}\
+    .editor-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 1rem 0.9rem; }}\
+    .model-picker {{ display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }}\
+    .footer-label {{ color: #6e7681; font-size: 12px; text-transform: lowercase; }}\
+    .model-select {{ width: auto; min-width: 11rem; background: transparent; border: none; color: #8b949e; font-size: 12px; padding: 0 1.15rem 0 0; cursor: pointer; }}\
+    .model-select:focus {{ outline: none; color: #c9d1d9; }}\
+    .footer-actions {{ display: inline-flex; align-items: center; gap: 0.85rem; min-width: 0; }}\
+    .footer-link {{ background: transparent; color: #6e7681; border: none; padding: 0; font-size: 12px; font-weight: 400; text-transform: lowercase; }}\
+    .footer-link:hover {{ background: transparent; color: #c9d1d9; }}\
+    .footer-meta {{ color: #484f58; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}\
     .settings-panel {{ position: fixed; inset: 0; background: #0d1117; z-index: 20; overflow-y: auto; }}\
-    .settings-header {{ display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid #21262d; }}\
-    .settings-header span {{ color: #8b949e; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }}\
-    .settings-header button {{ background: transparent; color: #8b949e; font-size: 13px; }}\
-    .settings-header button:hover {{ color: #c9d1d9; background: transparent; }}\
-    .device-info {{ color: #8b949e; font-size: 12px; margin-top: 2rem; border-top: 1px solid #21262d; padding-top: 0.75rem; }}\
+    .settings-shell {{ width: min(100%, 42rem); margin: 0 auto; }}\
+    .settings-head {{ display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #21262d; }}\
+    .settings-head span {{ color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }}\
+    .settings-head button {{ background: transparent; color: #484f58; border: 1px solid #30363d; font-size: 12px; padding: 0.2rem 0.5rem; }}\
+    .settings-head button:hover {{ color: #c9d1d9; background: transparent; }}\
+    .settings-copy {{ color: #6e7681; font-size: 13px; padding: 0.85rem 1rem 0; }}\
+    .device-info {{ color: #484f58; font-size: 12px; padding: 1rem; }}\
+    @media (max-width: 640px) {{\
+      .editor-footer {{ flex-direction: column; align-items: flex-start; }}\
+      .footer-actions {{ width: 100%; justify-content: space-between; }}\
+      .footer-meta {{ white-space: normal; }}\
+    }}\
   </style>\
 </head>\
 <body>\
@@ -1134,6 +1241,26 @@ fn render_ui_script() -> String {
 
   document.querySelectorAll(".ai-config-form").forEach(initForm);
 
+  function setSettingsOpen(open) {
+    var panel = document.getElementById("settings-panel");
+    if (!panel) return;
+    panel.classList.toggle("is-hidden", !open);
+  }
+
+  var openSettings = document.getElementById("open-settings");
+  if (openSettings) {
+    openSettings.addEventListener("click", function () {
+      setSettingsOpen(true);
+    });
+  }
+
+  var closeSettings = document.getElementById("close-settings");
+  if (closeSettings) {
+    closeSettings.addEventListener("click", function () {
+      setSettingsOpen(false);
+    });
+  }
+
   // Auto-resize textarea to content
   var prompt = document.getElementById("prompt");
   if (prompt) {
@@ -1167,8 +1294,7 @@ fn render_ui_script() -> String {
           }
           if (text === "/settings") {
             e.preventDefault();
-            var panel = document.getElementById("settings-panel");
-            if (panel) panel.classList.remove("is-hidden");
+            setSettingsOpen(true);
             prompt.value = "";
             autoResize();
             return;
@@ -1179,6 +1305,20 @@ fn render_ui_script() -> String {
       });
     }
   }
+
+  var modelSwitcher = document.getElementById("model-switcher");
+  var modelSwitchForm = document.getElementById("model-switch-form");
+  if (modelSwitcher && modelSwitchForm) {
+    modelSwitcher.addEventListener("change", function () {
+      modelSwitchForm.submit();
+    });
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      setSettingsOpen(false);
+    }
+  });
 
   // Scroll transcript to bottom on load
   var output = document.getElementById("output");
@@ -1461,12 +1601,11 @@ mod tests {
         let layout = test_layout("setup");
         let html = render_home_page(&layout, &base_config(), None, None, None, None, None).unwrap();
 
-        assert!(html.contains("Pick an AI provider"));
-        assert!(html.contains("data-open-picker=\"provider\""));
-        assert!(html.contains("name=\"provider_custom\""));
-        assert!(html.contains(">Device</summary>"));
-        assert!(!html.contains("ClawPi local console"));
-        assert!(!html.contains("This browser handoff should stay narrow"));
+        assert!(html.contains("Set up your AI provider to get started."));
+        assert!(html.contains("name=\"provider_value\""));
+        assert!(html.contains("name=\"model\""));
+        assert!(html.contains("clawpi · Lab WiFi"));
+        assert!(!html.contains("Message Claw..."));
     }
 
     #[test]
@@ -1479,10 +1618,10 @@ mod tests {
 
         let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
 
-        assert!(html.contains("<summary>AI</summary>"));
-        assert!(html.contains("Ask Claw anything."));
-        assert!(html.contains("placeholder=\"Ask Claw anything.\""));
-        assert!(!html.contains("AI settings and device details"));
+        assert!(html.contains("placeholder=\"Message Claw...\""));
+        assert!(html.contains("id=\"model-switcher\""));
+        assert!(html.contains(">settings</button>"));
+        assert!(html.contains("OpenRouter"));
     }
 
     #[test]
@@ -1490,22 +1629,54 @@ mod tests {
         let layout = test_layout("keyless");
         let mut config = base_config();
         config.ai_provider = Some(String::from("ollama"));
-        config.ai_model = Some(String::from("llama3.2"));
+        config.ai_model = Some(String::from("llama4:maverick"));
 
         let html = render_home_page(&layout, &config, None, None, None, None, None).unwrap();
 
-        assert!(html.contains("<summary>AI</summary>"));
         assert!(html.contains("data-initial-provider=\"ollama\""));
+        assert!(html.contains("Local"));
+        assert!(html.contains("Llama 4 Maverick"));
     }
 
     #[test]
-    fn render_ai_form_keeps_custom_provider_value() {
+    fn render_current_model_options_limits_choices_to_active_provider() {
         let mut config = base_config();
-        config.ai_provider = Some(String::from("acme/router"));
+        config.ai_provider = Some(String::from("openai"));
+        config.ai_model = Some(String::from("gpt-5.4"));
 
-        let html = render_ai_form(&config, "custom-ai", "Save", "update", false);
+        let html = render_current_model_options(&config);
 
-        assert!(html.contains("data-initial-provider=\"acme/router\""));
+        assert!(html.contains("GPT-5.4"));
+        assert!(html.contains("GPT-5.2"));
+        assert!(!html.contains("Claude Sonnet 4.6"));
+        assert!(!html.contains("Llama 4 Maverick"));
+    }
+
+    #[test]
+    fn current_provider_label_uses_active_provider() {
+        let mut config = base_config();
+        config.ai_provider = Some(String::from("anthropic"));
+
+        assert_eq!(current_provider_label(&config), "Anthropic");
+    }
+
+    #[test]
+    fn render_device_info_shows_wifi_label() {
+        let html = render_device_info(&base_config(), "Lab WiFi");
+
+        assert!(html.contains("clawpi · Lab WiFi"));
+    }
+
+    #[test]
+    fn render_ai_form_keeps_provider_value() {
+        let mut config = base_config();
+        config.ai_provider = Some(String::from("openrouter"));
+        config.ai_model = Some(String::from("openai/gpt-5.4"));
+
+        let html = render_ai_form(&config, "custom-ai", "Save", "update");
+
+        assert!(html.contains("data-initial-provider=\"openrouter\""));
+        assert!(html.contains("data-initial-model=\"openai/gpt-5.4\""));
         assert!(html.contains("name=\"provider_value\""));
     }
 
@@ -1514,19 +1685,6 @@ mod tests {
         let fields = HashMap::from([(String::from("provider_value"), String::from("ollama"))]);
 
         assert_eq!(resolve_provider(&fields), "ollama");
-    }
-
-    #[test]
-    fn resolve_provider_uses_custom_route_when_selected() {
-        let fields = HashMap::from([
-            (String::from("provider_preset"), String::from("custom")),
-            (
-                String::from("provider_custom"),
-                String::from("gateway.example/provider"),
-            ),
-        ]);
-
-        assert_eq!(resolve_provider(&fields), "gateway.example/provider");
     }
 
     #[test]
