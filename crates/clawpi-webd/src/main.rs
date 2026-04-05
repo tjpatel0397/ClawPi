@@ -16,7 +16,7 @@ use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const MODEL_CUSTOM_ID: &str = "__custom__";
 const AUTH_MODE_API_KEY: &str = "api_key";
@@ -672,7 +672,7 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
                                 render_home_page(
                                     layout,
                                     config,
-                                    Some("OpenAI login started. Finish sign-in in your browser, then paste the final redirect URL back here."),
+                                    Some("Next: sign in with your ChatGPT subscription in the browser, then paste the final redirect URL back here."),
                                     None,
                                     None,
                                     None,
@@ -931,7 +931,7 @@ fn render_setup_view(
     ai_form_state: &AiFormState,
     pending_openai_login: Option<&PendingOpenAiLogin>,
 ) -> String {
-    let ai_form = render_ai_form(config, "setup-ai", "Continue", "setup", ai_form_state);
+    let ai_form = render_ai_form(config, "setup-ai", "Next", "setup", ai_form_state);
     let pending_html = render_pending_openai_login(pending_openai_login);
 
     format!(
@@ -1105,11 +1105,13 @@ fn render_ai_form(
     } else {
         "sk-..."
     };
+    let default_submit_label = submit_label;
+    let next_submit_label = "Next";
 
     let provider_options_html = render_provider_select_options(initial_provider);
 
     format!(
-        "<form method=\"post\" action=\"/configure-ai\" class=\"ai-config-form form-stack\" data-form-mode=\"{form_mode}\" data-initial-provider=\"{initial_provider}\" data-initial-model=\"{initial_model}\" data-initial-auth=\"{initial_auth}\" data-initial-has-secret=\"{initial_has_secret}\">\
+        "<form method=\"post\" action=\"/configure-ai\" class=\"ai-config-form form-stack\" data-form-mode=\"{form_mode}\" data-initial-provider=\"{initial_provider}\" data-initial-model=\"{initial_model}\" data-initial-auth=\"{initial_auth}\" data-initial-has-secret=\"{initial_has_secret}\" data-default-submit-label=\"{default_submit_label}\" data-next-submit-label=\"{next_submit_label}\">\
            <input type=\"hidden\" name=\"auth_mode\" value=\"\">\
            <div class=\"field\">\
              <label for=\"{form_id}-provider\">Provider</label>\
@@ -1129,13 +1131,15 @@ fn render_ai_form(
              <label for=\"{form_id}-model\">Model</label>\
              <select id=\"{form_id}-model\" name=\"model\" data-model-select></select>\
            </div>\
-           <button type=\"submit\">{submit_label}</button>\
+           <button type=\"submit\" data-submit-button>{submit_label}</button>\
          </form>",
         form_mode = escape_html(form_mode),
         initial_provider = escape_html(initial_provider),
         initial_model = escape_html(initial_model),
         initial_auth = escape_html(initial_auth),
         initial_has_secret = if initial_has_secret { "true" } else { "false" },
+        default_submit_label = escape_html(default_submit_label),
+        next_submit_label = escape_html(next_submit_label),
         form_id = escape_html(form_id),
         api_key_placeholder = escape_html(api_key_placeholder),
         provider_options_html = provider_options_html,
@@ -1320,8 +1324,8 @@ fn render_pending_openai_login(pending_openai_login: Option<&PendingOpenAiLogin>
 
     format!(
         "<div class=\"oauth-login\" id=\"openai-login-card\">\
-           <div class=\"oauth-login-head\">OpenAI ChatGPT login in progress</div>\
-           <p class=\"oauth-login-copy\">Open the OpenAI login page in your browser. After OpenAI redirects to <span class=\"oauth-login-inline\">http://localhost:1455/auth/callback</span>, the browser on this computer may show a can&#39;t-open page. Copy the full address bar URL and paste it below.</p>\
+           <div class=\"oauth-login-head\">Connect your ChatGPT subscription</div>\
+           <p class=\"oauth-login-copy\">Open the OpenAI sign-in page and authenticate with your ChatGPT subscription account. After OpenAI redirects to <span class=\"oauth-login-inline\">http://localhost:1455/auth/callback</span>, the browser on this computer may show a can&#39;t-open page. Copy the full address bar URL and paste it below.</p>\
            <div class=\"oauth-login-actions\">\
              <a href=\"{authorize_url}\" target=\"_blank\" rel=\"noreferrer\">Open OpenAI login</a>\
            </div>\
@@ -1618,12 +1622,15 @@ fn render_ui_script() -> String {
     var initialModel = form.dataset.initialModel || "";
     var initialAuth = form.dataset.initialAuth || "";
     var initialHasSecret = form.dataset.initialHasSecret === "true";
+    var defaultSubmitLabel = form.dataset.defaultSubmitLabel || "Save";
+    var nextSubmitLabel = form.dataset.nextSubmitLabel || "Next";
 
     var providerSelect = form.querySelector("[data-provider-select]");
     var authSelect = form.querySelector("[data-auth-select]");
     var modelSelect = form.querySelector("[data-model-select]");
     var authModeInput = form.querySelector('input[name="auth_mode"]');
     var apiKeyInput = form.querySelector('input[name="api_key"]');
+    var submitButton = form.querySelector("[data-submit-button]");
     var credentialLabel = form.querySelector("[data-credential-label]");
     var authField = form.querySelector('[data-field="auth"]');
     var credentialField = form.querySelector('[data-field="credential"]');
@@ -1639,9 +1646,11 @@ fn render_ui_script() -> String {
         if (preset && preset.auth_options.length === 1) {
           authModeInput.value = preset.auth_options[0].id;
           updateCredential(preset.auth_options[0]);
+          updateSubmitLabel(preset.auth_options[0]);
         } else {
           authModeInput.value = "";
           toggle(credentialField, true);
+          updateSubmitLabel(null);
         }
         return;
       }
@@ -1667,6 +1676,7 @@ fn render_ui_script() -> String {
       toggle(authField, false);
       var selected = preset.auth_options.find(function (o) { return o.id === defaultAuth; }) || preset.auth_options[0];
       updateCredential(selected);
+      updateSubmitLabel(selected);
     }
 
     function updateCredential(authOption) {
@@ -1677,6 +1687,13 @@ fn render_ui_script() -> String {
       if (credentialLabel) credentialLabel.textContent = authOption.secret_label || "API key";
       if (apiKeyInput) apiKeyInput.placeholder = authOption.secret_placeholder || "sk-...";
       toggle(credentialField, false);
+    }
+
+    function updateSubmitLabel(authOption) {
+      if (!submitButton) return;
+      submitButton.textContent = authOption && authOption.id === "device_login"
+        ? nextSubmitLabel
+        : defaultSubmitLabel;
     }
 
     function updateModels(preset) {
@@ -1716,6 +1733,7 @@ fn render_ui_script() -> String {
         authModeInput.value = authSelect.value;
         var opt = preset.auth_options.find(function (o) { return o.id === authSelect.value; });
         updateCredential(opt);
+        updateSubmitLabel(opt);
       });
     }
 
@@ -2002,12 +2020,14 @@ fn write_runtime_status(layout: &Layout, config: &ClawPiConfig) -> io::Result<()
 }
 
 fn read_http_request(stream: &mut TcpStream) -> io::Result<Request> {
-    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_read_timeout(Some(Duration::from_millis(500)))?;
 
     let mut buffer = Vec::new();
     let mut chunk = [0_u8; 4096];
+    let header_deadline = Instant::now() + Duration::from_secs(6);
     let header_end = loop {
-        let bytes_read = stream.read(&mut chunk)?;
+        let bytes_read =
+            read_with_deadline(stream, &mut chunk, header_deadline, "request headers")?;
         if bytes_read == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
@@ -2039,22 +2059,33 @@ fn read_http_request(stream: &mut TcpStream) -> io::Result<Request> {
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing path"))?;
 
-    let content_length = lines
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            if name.eq_ignore_ascii_case("content-length") {
-                value.trim().parse::<usize>().ok()
-            } else {
-                None
-            }
-        })
-        .unwrap_or(0);
+    let mut content_length = 0;
+    let mut expects_continue = false;
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case("content-length") {
+            content_length = value.trim().parse::<usize>().unwrap_or(0);
+        } else if name.eq_ignore_ascii_case("expect")
+            && value.trim().eq_ignore_ascii_case("100-continue")
+        {
+            expects_continue = true;
+        }
+    }
 
     let mut body = buffer[header_end..].to_vec();
+    if expects_continue && body.len() < content_length {
+        stream.write_all(b"HTTP/1.1 100 Continue\r\n\r\n")?;
+    }
+    let body_deadline = Instant::now() + Duration::from_secs(12);
     while body.len() < content_length {
-        let bytes_read = stream.read(&mut chunk)?;
+        let bytes_read = read_with_deadline(stream, &mut chunk, body_deadline, "request body")?;
         if bytes_read == 0 {
-            break;
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "request ended before body completed",
+            ));
         }
         body.extend_from_slice(&chunk[..bytes_read]);
     }
@@ -2065,6 +2096,33 @@ fn read_http_request(stream: &mut TcpStream) -> io::Result<Request> {
         path: path.to_string(),
         body,
     })
+}
+
+fn read_with_deadline(
+    stream: &mut TcpStream,
+    chunk: &mut [u8],
+    deadline: Instant,
+    target: &str,
+) -> io::Result<usize> {
+    loop {
+        match stream.read(chunk) {
+            Ok(bytes_read) => return Ok(bytes_read),
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) =>
+            {
+                if Instant::now() >= deadline {
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        format!("timed out while reading {target}"),
+                    ));
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -2202,6 +2260,7 @@ mod tests {
             render_home_page(&layout, &base_config(), None, None, None, None, None, None).unwrap();
 
         assert!(html.contains("Set up your AI provider to get started."));
+        assert!(html.contains(">Next</button>"));
         assert!(html.contains("name=\"provider_value\""));
         assert!(html.contains("name=\"model\""));
         assert!(html.contains("clawpi · Lab WiFi"));
@@ -2273,7 +2332,7 @@ mod tests {
         let html =
             render_home_page(&layout, &base_config(), None, None, None, None, None, None).unwrap();
 
-        assert!(html.contains("OpenAI ChatGPT login in progress"));
+        assert!(html.contains("Connect your ChatGPT subscription"));
         assert!(html.contains("http://localhost:1455/auth/callback"));
         assert!(html.contains("/oauth/openai/complete"));
     }
@@ -2346,6 +2405,7 @@ mod tests {
         );
 
         assert!(html.contains("data-initial-auth=\"device_login\""));
+        assert!(html.contains("data-next-submit-label=\"Next\""));
     }
 
     #[test]
