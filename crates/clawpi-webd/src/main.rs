@@ -405,6 +405,9 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
     let request = match read_http_request(stream) {
         Ok(request) => request,
         Err(err) => {
+            if should_drop_request_error(&err) {
+                return Ok(());
+            }
             write_http_response(
                 stream,
                 "400 Bad Request",
@@ -848,6 +851,17 @@ fn handle_connection(layout: &Layout, stream: &mut TcpStream) -> io::Result<()> 
     }
 
     Ok(())
+}
+
+fn should_drop_request_error(err: &io::Error) -> bool {
+    matches!(
+        err.kind(),
+        io::ErrorKind::TimedOut
+            | io::ErrorKind::WouldBlock
+            | io::ErrorKind::UnexpectedEof
+            | io::ErrorKind::ConnectionReset
+            | io::ErrorKind::BrokenPipe
+    )
 }
 
 fn render_status_text(layout: &Layout, config: &ClawPiConfig) -> io::Result<String> {
@@ -2265,6 +2279,22 @@ mod tests {
         assert!(html.contains("name=\"model\""));
         assert!(html.contains("clawpi · Lab WiFi"));
         assert!(!html.contains("Message Claw..."));
+    }
+
+    #[test]
+    fn drops_idle_request_read_errors() {
+        assert!(should_drop_request_error(&io::Error::new(
+            io::ErrorKind::TimedOut,
+            "timed out while reading request headers"
+        )));
+        assert!(should_drop_request_error(&io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "request ended before headers completed"
+        )));
+        assert!(!should_drop_request_error(&io::Error::new(
+            io::ErrorKind::InvalidData,
+            "missing request line"
+        )));
     }
 
     #[test]
